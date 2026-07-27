@@ -88,8 +88,20 @@ ADDON_INFO="$(curl -s -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
     http://supervisor/addons/self/info 2>/dev/null || true)"
 ADDON_VER="$(printf '%s' "$ADDON_INFO" | jq -r '.data.version // empty' 2>/dev/null || true)"
 ADDON_SLUG="$(printf '%s' "$ADDON_INFO" | jq -r '.data.slug // empty' 2>/dev/null || true)"
+# HA 2026.x renamed add-ons to "apps" and moved the panel from
+# /hassio/addon/<slug>/info to /config/app/<slug>/info. Pick by core version so
+# this stays correct on older installs too.
+HA_VER="$(curl -s -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+    http://supervisor/core/info 2>/dev/null | jq -r '.data.version // empty' 2>/dev/null || true)"
+HA_MAJOR="${HA_VER%%.*}"
+if [ -n "$HA_MAJOR" ] && [ "$HA_MAJOR" -ge 2026 ] 2>/dev/null; then
+    ADDON_PAGE_PATH="/config/app"
+else
+    ADDON_PAGE_PATH="/hassio/addon"
+fi
+
 mkdir -p /opt/ttyd-shell
-if build-ttyd-shell "$SHELL_HTML" "$ADDON_VER" "$ADDON_SLUG" >/dev/null 2>&1; then
+if build-ttyd-shell "$SHELL_HTML" "$ADDON_VER" "$ADDON_SLUG" "$ADDON_PAGE_PATH" >/dev/null 2>&1; then
     INDEX_ARG="--index ${SHELL_HTML}"
     bashio::log.info "[ttyd] custom shell built (v${ADDON_VER:-unknown})"
 else

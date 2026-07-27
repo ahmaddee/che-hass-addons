@@ -21,9 +21,13 @@
 # ============================================================================
 set -euo pipefail
 
-OUT="${1:?usage: build-ttyd-shell <output-path> [version] [addon-slug]}"
+OUT="${1:?usage: build-ttyd-shell <output-path> [version] [addon-slug] [addon-page-path]}"
 VERSION="${2:-}"
 SLUG="${3:-}"
+# Home Assistant renamed add-ons to "apps" and moved the panel: 2026.x serves the
+# add-on page at /config/app/<slug>/info, older releases at /hassio/addon/<slug>/info.
+# The caller resolves which; default to the modern one.
+ADDON_PAGE_PATH="${4:-/config/app}"
 PROBE_PORT="${TTYD_PROBE_PORT:-7999}"
 BAR_HEIGHT="40px"
 
@@ -118,6 +122,7 @@ CSS
 read -r -d '' CHE_BAR <<HTML || true
 <script id="che-bar-script">
 window.__CHE_SLUG__ = '${SLUG}';
+window.__CHE_ADDON_PAGE__ = '${ADDON_PAGE_PATH}';
 (function () {
   // The bar is built in JS and appended AFTER load, not written into the static
   // HTML. ttyd mounts its UI with preact via render(h(App), document.body),
@@ -158,8 +163,16 @@ window.__CHE_SLUG__ = '${SLUG}';
   // Home Assistant Core — either the add-on page below, or a script calling
   // hassio.addon_restart. See DOCS.md.
   document.getElementById('che-addon-page').addEventListener('click', function () {
-    var url = '/hassio/addon/' + (window.__CHE_SLUG__ || 'self') + '/info';
-    try { window.top.location.href = url; } catch (e) { window.open(url, '_blank'); }
+    // Must be an ABSOLUTE url. This page is served under
+    // /api/hassio_ingress/<token>/, so a relative "/hassio/addon/..." resolves
+    // against the ingress path and 404s. Take the origin explicitly.
+    var origin = location.origin;
+    try { if (window.top && window.top.location) origin = window.top.location.origin; } catch (e) {}
+    var slug = window.__CHE_SLUG__ || '';
+    var base = window.__CHE_ADDON_PAGE__ || '/config/app';
+    var url = slug ? origin + base + '/' + slug + '/info' : origin + '/config/dashboard';
+    // New tab, matching the ↗ affordance — and so the terminal is not replaced.
+    window.open(url, '_blank', 'noopener');
   });
   }
 

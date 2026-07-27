@@ -180,3 +180,22 @@ Claude Code reads images natively, but a browser terminal cannot paste one. Opti
 
 Then just tell Claude where it is, or say "check uploads". There is no watcher and no background
 daemon — you are the trigger.
+
+## Browser automation (`enable_playwright`)
+
+Off by default. Turning it on installs Alpine's Chromium and wires the Playwright MCP server to it,
+giving Claude real browser tools — navigate, click, screenshot, read the console.
+
+**It costs about 857 MiB and makes the first boot after enabling take several minutes.** That is why
+it is opt-in.
+
+Two things that look like the obvious way to do this and do not work on a Raspberry Pi:
+
+- **Google Chrome**, the Playwright MCP's default target, has **no Linux ARM64 build at all**.
+- **`playwright install chromium`** downloads a glibc-linked build that cannot execute on
+  Alpine/musl.
+
+The add-on installs the distribution's own musl-native Chromium and points Playwright at it with
+`--executable-path`. Screenshots and traces are written to `/share/che-uploads/playwright/`.
+
+After enabling, restart Claude Code (`/exit`, then continue) so the new MCP server loads.

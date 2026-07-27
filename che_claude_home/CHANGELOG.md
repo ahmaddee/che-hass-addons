@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.7 — 2026-07-27
+
+- **fix**: the **Add-on page** button 404'd. Home Assistant 2026.x renamed add-ons to *apps* and moved the panel from `/hassio/addon/<slug>/info` to `/config/app/<slug>/info`. The route is now chosen from HA's core version at boot, so installs on earlier releases still get a working link.
+- **fix**: that button also built a *relative* URL, which resolves against `/api/hassio_ingress/<token>/` and 404s regardless of the route. It now takes `window.top.location.origin` explicitly.
+- **fix**: it claimed to open a new tab (↗) and navigated in place, replacing the terminal. Now genuinely `window.open(..., '_blank')`.
+- **fix**: `enable_playwright` did nothing — the third option to ship in the schema with no implementation behind it. New `cont-init.d/45-playwright.sh` installs Alpine's musl-native Chromium and wires the Playwright MCP to it. Google Chrome has no Linux ARM64 build at all, and Playwright's bundled Chromium is glibc-linked and won't run on Alpine — `--executable-path` against the apk build is the only route that works on a Pi.
+- **note**: enabling it costs ~857 MiB and a slow first boot. Opt-in, and the log says so.
+
 ## 0.1.6 — 2026-07-27
 
 - **fix**: `enable_image_upload` did nothing. It has been present in `config.yaml` and in the schema with **no implementation anywhere in the repo** — toggling it changed nothing, silently, with no error. New `cont-init.d/35-image-upload.sh` installs the trzsz receiver when the option is on. ttyd 1.7.7 already ships the entire client half (`TrzszAddon`, `TrzszUploadFiles`, and `trzszDragInitTimeout` for drag-and-drop); only the binary on this side was missing. No sidecar, no extra port, no HTTP endpoint.
