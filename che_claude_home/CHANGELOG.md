@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5 — 2026-07-27
+
+- **new**: persistent top bar above the terminal, showing the add-on name and version with **Reconnect** and **Restart add-on** buttons. No new services, no new ports, no new dependencies.
+- **new**: `usr/local/bin/build-ttyd-shell` generates the shell at boot. ttyd 1.7.7 serves exactly one self-contained ~730 KB page and mounts it into `document.body` — there is no `/terminal` route to iframe, and `--index` *replaces* the terminal rather than wrapping it. So the generator starts a throwaway ttyd on loopback, fetches ttyd's own page, and splices our style and script into it. Re-extracting on every boot means this tracks ttyd upgrades instead of pinning us to one version's markup.
+- **fix**: if the shell fails to build for any reason, ttyd starts without `--index` and serves its stock UI. A broken top bar must never cost someone their terminal.
+- **note**: the bar is created in JavaScript after page load, not written into the static HTML. ttyd mounts with preact via `render(h(App), document.body)`, which diffs against body's existing children — a static `<div>` there gets claimed and stripped, rendering as an empty unstyled strip. A watchdog re-adds the bar if it ever disappears. Styles are literal values with `!important` rather than CSS custom properties, since this stylesheet lands in a page we don't own.
+- **known limitation**: the Restart button posts to `/api/hassio/addons/self/restart` using the browser's HA session. This is unverified — HA's API authenticates by `Authorization: Bearer`, not cookies, so it may return 401. The reliable path is the HA-side `hassio.addon_restart` service, which runs in HA Core and therefore still works when this container is wedged — which is the situation you actually reach for it in. A button served by the add-on cannot rescue the add-on.
+
 ## 0.1.4 — 2026-07-27
 
 - **fix**: scrolling in the browser terminal, properly this time. The cause was never mouse mode on its own — it was that tmux drives the outer terminal's **alternate screen**, which xterm.js gives no scrollback and where it translates wheel events into arrow keys. In a Claude Code session that meant scrolling up walked backwards through your own message history. `terminal-overrides` now strips the alternate-screen capability (`smcup@:rmcup@`) so tmux writes to the normal buffer, xterm.js owns the scrollback, and the wheel scrolls the page with a real scrollbar.

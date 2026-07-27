@@ -1,0 +1,217 @@
+#!/bin/bash
+# ============================================================================
+# build-ttyd-shell — generate the custom ttyd index page with our top bar
+#
+# ttyd 1.7.7 serves exactly ONE page: a single self-contained ~730 KB HTML with
+# xterm.js inlined, mounted into document.body. There is no /terminal route and
+# no external asset to reference, so `--index` REPLACES the terminal rather than
+# wrapping it. An iframe has nothing to point at.
+#
+# So we take ttyd's own page and inject into it: start a throwaway ttyd on
+# loopback, fetch what it serves, splice our <style> into <head> and our bar
+# markup after <body>, and hand the result back via -I.
+#
+# Re-extracting on every boot means this tracks ttyd upgrades instead of
+# pinning us to one version's markup.
+#
+# Exits non-zero on any failure. The caller MUST then start ttyd WITHOUT -I —
+# a broken shell must never cost someone their terminal.
+#
+# Usage: build-ttyd-shell <output-path> [version-string]
+# ============================================================================
+set -euo pipefail
+
+OUT="${1:?usage: build-ttyd-shell <output-path> [version]}"
+VERSION="${2:-}"
+PROBE_PORT="${TTYD_PROBE_PORT:-7999}"
+BAR_HEIGHT="40px"
+
+TMP_BASE="$(mktemp)"
+cleanup() { rm -f "$TMP_BASE"; [ -n "${PROBE_PID:-}" ] && kill "$PROBE_PID" 2>/dev/null || true; }
+trap cleanup EXIT
+
+# --- 1. Harvest ttyd's built-in page from a throwaway instance ---------------
+ttyd -p "$PROBE_PORT" -i lo /bin/true >/dev/null 2>&1 &
+PROBE_PID=$!
+
+for _ in $(seq 1 20); do
+    if curl -sf -o "$TMP_BASE" "http://127.0.0.1:${PROBE_PORT}/" 2>/dev/null; then break; fi
+    sleep 0.25
+done
+
+kill "$PROBE_PID" 2>/dev/null || true
+PROBE_PID=""
+
+[ -s "$TMP_BASE" ] || { echo "build-ttyd-shell: could not fetch ttyd's index" >&2; exit 1; }
+grep -q '<body>' "$TMP_BASE" || { echo "build-ttyd-shell: no <body> in ttyd index" >&2; exit 1; }
+grep -q 'terminal-container' "$TMP_BASE" || {
+    echo "build-ttyd-shell: ttyd markup changed — #terminal-container not found, refusing to patch" >&2
+    exit 1
+}
+
+# --- 2. Our additions --------------------------------------------------------
+# Colours are hardcoded to match HA's default dark theme: HA's CSS custom
+# properties do not cascade into an ingress iframe, so var(--primary-color) and
+# friends resolve to nothing here. Kept in one block for easy retheming.
+read -r -d '' CHE_STYLE <<CSS || true
+<style id="che-bar-style">
+/* Literal values, not custom properties, and !important throughout: this stylesheet
+   lands in a page we do not own, alongside ttyd's own CSS and whatever xterm.js
+   sets at runtime. Anything that can be silently overridden eventually is. */
+#che-bar {
+  position: fixed !important;
+  top: 0 !important; left: 0 !important; right: 0 !important;
+  height: ${BAR_HEIGHT} !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 0 12px !important;
+  margin: 0 !important;
+  background: #262626 !important;
+  border-bottom: 1px solid #333 !important;
+  color: #e1e1e1 !important;
+  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  z-index: 2147483647 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  user-select: none !important;
+}
+#che-bar .che-mark { font-size: 16px !important; line-height: 1 !important; }
+#che-bar .che-name { font-weight: 600 !important; letter-spacing: .2px !important; color: #e1e1e1 !important; }
+#che-bar .che-ver  { color: #888 !important; font-size: 12px !important; }
+#che-bar .che-spacer { flex: 1 1 auto !important; }
+#che-bar button {
+  font: 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  color: #e1e1e1 !important;
+  background: #333 !important;
+  border: 1px solid #444 !important;
+  border-radius: 5px !important;
+  padding: 5px 10px !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+#che-bar button:hover:not(:disabled) { background: #3a3a3a !important; }
+#che-bar button:disabled { opacity: .6 !important; cursor: default !important; }
+#che-bar button.che-danger {
+  background: #c62828 !important;
+  border-color: #c62828 !important;
+  color: #fff !important;
+}
+/* Offset ttyd's terminal so the bar does not cover it. */
+#terminal-container {
+  position: absolute !important;
+  top: ${BAR_HEIGHT} !important;
+  left: 0 !important; right: 0 !important; bottom: 0 !important;
+  height: auto !important;
+}
+@media (max-width: 520px) {
+  #che-bar .che-name { display: none; }
+}
+</style>
+CSS
+
+read -r -d '' CHE_BAR <<HTML || true
+<script id="che-bar-script">
+(function () {
+  // The bar is built in JS and appended AFTER load, not written into the static
+  // HTML. ttyd mounts its UI with preact via render(h(App), document.body),
+  // which diffs against body's existing children — a static <div> placed there
+  // gets reused and stripped, leaving an unstyled element our selectors no
+  // longer match. Appending after preact has rendered keeps it ours.
+  function build() {
+    if (document.getElementById('che-bar')) return;
+    var bar = document.createElement('div');
+    bar.id = 'che-bar';
+    bar.innerHTML =
+      '<span class="che-mark">&#129302;</span>' +
+      '<span class="che-name">CHE Claude in HomE Assistant</span>' +
+      '<span class="che-ver">${VERSION:+v}${VERSION}</span>' +
+      '<span class="che-spacer"></span>' +
+      '<button id="che-reconnect" title="Re-attach this browser to the terminal session. Does not affect your Claude conversation.">Reconnect</button>' +
+      '<button id="che-restart" title="Restart the whole add-on container. Your conversation history is preserved.">Restart add-on</button>';
+    document.body.appendChild(bar);
+    wire();
+  }
+
+  function wire() {
+  // Reconnect: reload the page. ttyd re-attaches to the same tmux session on
+  // load, so the Claude conversation and shell state are untouched. No backend.
+  document.getElementById('che-reconnect').addEventListener('click', function () {
+    location.reload();
+  });
+
+  // Restart: two-step. The button this replaces exists because of a wedged
+  // terminal and a real panic — it should not itself be one misclick from
+  // killing the container.
+  var btn = document.getElementById('che-restart');
+  var LABEL = btn.textContent;
+  var armed = false, timer = null;
+
+  btn.addEventListener('click', function () {
+    if (!armed) {
+      armed = true;
+      btn.textContent = 'Confirm restart?';
+      btn.classList.add('che-danger');
+      timer = setTimeout(function () {
+        armed = false;
+        btn.textContent = LABEL;
+        btn.classList.remove('che-danger');
+      }, 3000);
+      return;
+    }
+    clearTimeout(timer);
+    armed = false;
+    btn.disabled = true;
+    btn.textContent = 'Restarting...';
+
+    // The browser cannot reach http://supervisor (Docker-internal, and the
+    // token must never ship client-side), so this goes through Home
+    // Assistant's own Supervisor proxy using the session already in the
+    // browser. If HA rejects it, say so plainly rather than appearing to work.
+    fetch('/api/hassio/addons/self/restart', {
+      method: 'POST',
+      credentials: 'same-origin'
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      btn.textContent = 'Restarting...';
+      setTimeout(function () { location.reload(); }, 15000);
+    }).catch(function (e) {
+      btn.disabled = false;
+      btn.classList.remove('che-danger');
+      btn.textContent = 'Restart failed';
+      console.error('[che] restart failed:', e);
+      setTimeout(function () { btn.textContent = LABEL; }, 4000);
+    });
+  });
+  }
+
+  // Build once the page has settled, then keep an eye on it: if preact ever
+  // re-renders body and drops the bar, put it back.
+  if (document.readyState === 'complete') { setTimeout(build, 0); }
+  else { window.addEventListener('load', function () { setTimeout(build, 0); }); }
+  setInterval(build, 2000);
+})();
+</script>
+HTML
+
+# --- 3. Splice ------------------------------------------------------------
+# python3 rather than sed: the payload contains slashes, braces and newlines,
+# and the base document is ~730 KB on one line.
+python3 - "$TMP_BASE" "$OUT" "$CHE_STYLE" "$CHE_BAR" <<'PY'
+import sys
+base_path, out_path, style, bar = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+html = open(base_path, encoding='utf-8').read()
+
+if '</head>' not in html or '<body>' not in html:
+    sys.exit('build-ttyd-shell: unexpected ttyd markup')
+
+html = html.replace('</head>', style + '</head>', 1)
+html = html.replace('<body>', '<body>' + bar, 1)
+
+open(out_path, 'w', encoding='utf-8').write(html)
+print(f'build-ttyd-shell: wrote {out_path} ({len(html)} bytes)')
+PY

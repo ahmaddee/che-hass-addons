@@ -75,7 +75,27 @@ else
     SHELL_CMD="bash -c 'cd \"$WORKDIR\" && eval \"$CLAUDE_LAUNCH_CMD\"'"
 fi
 
+# Build the custom shell — ttyd's own page with our top bar injected into it.
+# ttyd serves exactly one self-contained page and mounts it into document.body,
+# so there is no route to iframe and --index REPLACES the terminal rather than
+# wrapping it. build-ttyd-shell patches ttyd's own HTML instead.
+#
+# If anything about that fails, fall through to ttyd's stock UI. A broken shell
+# must never cost someone their terminal.
+SHELL_HTML="/opt/ttyd-shell/index.html"
+INDEX_ARG=""
+ADDON_VER="$(curl -s -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+    http://supervisor/addons/self/info 2>/dev/null | jq -r '.data.version // empty' 2>/dev/null || true)"
+mkdir -p /opt/ttyd-shell
+if build-ttyd-shell "$SHELL_HTML" "$ADDON_VER" >/dev/null 2>&1; then
+    INDEX_ARG="--index ${SHELL_HTML}"
+    bashio::log.info "[ttyd] custom shell built (v${ADDON_VER:-unknown})"
+else
+    bashio::log.warning "[ttyd] shell build failed — serving stock ttyd UI"
+fi
+
 # ttyd flags:
+#   --index                   — our patched page (top bar + terminal), if built
 #   --writable                — allow keyboard input (not read-only viewer)
 #   --interface 0.0.0.0       — bind all interfaces (ingress needs this)
 #   --ping-interval 30        — keep websocket alive through proxies
@@ -85,6 +105,7 @@ fi
 exec ttyd \
     --port "${PORT}" \
     --interface 0.0.0.0 \
+    ${INDEX_ARG} \
     --writable \
     --ping-interval 30 \
     --client-option reconnect=5 \
