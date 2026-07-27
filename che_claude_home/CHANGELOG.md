@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.9 — 2026-07-27
+
+- **removed**: `sidebar_title`. It was declared in the schema and read by nothing. It also cannot work as designed — `panel_title` is an add-on *manifest* field, and the Supervisor API returns 403 for manifest changes on a running install, so no runtime option can rename the sidebar entry. The name is now simply fixed at "CHE Claude".
+- **removed**: `enable_wa_watcher`. Also read by nothing — the WhatsApp bridge isn't implemented yet. A toggle that silently does nothing is worse than an absent one; it'll come back when there's something behind it.
+- **audit**: swept the whole rootfs for the pattern behind most of today's bugs — configuration written to one path and read from another, and options declared but never consumed. Every remaining option resolves to code that reads it, every hardcoded path either exists or is deliberately probed with `[ -f ]` as a legacy-migration check. The two above were the only genuine finds.
+
 ## 0.1.8 — 2026-07-27
 
 - **fix**: the add-on never appeared in Home Assistant's sidebar. `panel_icon`, `panel_title` and `panel_admin` were all declared in `config.yaml`, but `ingress_panel: true` — the field that actually asks for a panel — was missing, so all three were inert. Reaching the terminal meant going through Settings → Add-ons → Open Web UI every time. Now appears as **CHE Claude** with `mdi:home-heart-outline`.

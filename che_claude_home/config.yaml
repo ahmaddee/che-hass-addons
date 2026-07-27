@@ -1,7 +1,7 @@
 ---
 name: "CHE Claude in HomE Assistant"
 description: "Claude Code, resilience-first. Sessions survive restarts, everything persists in /data, real scrollback, first-class HA helpers. A fresh take on running Anthropic's Claude Code CLI inside Home Assistant."
-version: "0.1.8"
+version: "0.1.9"
 slug: "che_claude_home"
 init: false
 
@@ -51,7 +51,6 @@ options:
   # Startup behavior
   auto_launch_claude: true
   survive_restart: true
-  sidebar_title: "CHE Claude"
 
   # Where shells + Claude Code start. Must exist inside the container — most users
   # want /config so Claude Code's project scoping keys memory under `-config`.
@@ -69,7 +68,6 @@ options:
   claude_pinned_version: ""
 
   # Feature toggles (opt-in for anything heavy or externally-facing)
-  enable_wa_watcher: false
   enable_playwright: false
   enable_image_upload: true
   enable_mcp_defaults: true
@@ -82,12 +80,10 @@ options:
 schema:
   auto_launch_claude: bool?
   survive_restart: bool?
-  sidebar_title: str?
   working_directory: str?
   dangerously_skip_permissions: bool?
   claude_source: "list(baked|latest_npm|pinned_version)?"
   claude_pinned_version: str?
-  enable_wa_watcher: bool?
   enable_playwright: bool?
   enable_image_upload: bool?
   enable_mcp_defaults: bool?

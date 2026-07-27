@@ -199,3 +199,16 @@ The add-on installs the distribution's own musl-native Chromium and points Playw
 `--executable-path`. Screenshots and traces are written to `/share/che-uploads/playwright/`.
 
 After enabling, restart Claude Code (`/exit`, then continue) so the new MCP server loads.
+
+## A note on options
+
+Every option in this add-on's configuration is read by something. If you turn one on and nothing
+happens, that's a bug — please report it.
+
+Two options were removed in 0.1.9 because they were declared but did nothing:
+
+- **`sidebar_title`** — the sidebar entry is named by `panel_title` in the add-on manifest, and
+  manifest fields cannot be changed on a running install (the Supervisor API returns 403 for them).
+  No runtime option could ever have worked. The sidebar name is fixed at "CHE Claude".
+- **`enable_wa_watcher`** — the WhatsApp bridge is not implemented yet. It will return as an option
+  when there is something behind it.
