@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3 — 2026-07-27
+
+- **fix**: the default `time` MCP server has never been able to start. `cont-init.d/30-skills-mcp.sh` seeded it as `uvx mcp-server-time`, but `uv`/`uvx` is not installed in this image. The failure is silent — the config is written, the boot log reports success, and the server simply never comes up. It now points at `/data/packages/python/venv/bin/mcp-server-time`.
+- **fix**: that binary is now actually installed. The hook runs `persist-install --python mcp-server-time` on first boot, guarded so it only runs once and non-fatal so a boot without network cannot abort container start — it retries on the next start instead.
+- **fix**: existing installs are repaired, not just new ones. The seed step deliberately never overwrites an existing `settings.json`, which meant anyone already on <= 0.1.2 would have stayed broken forever. The hook now detects the specific unusable `"command": "uvx"` definition and rewrites only that key, preserving every other setting, with a `.bak-uvx` backup alongside.
+- **change**: the server's timezone comes from `$TZ` (which Supervisor exports from Home Assistant's configured timezone) instead of a hardcoded value, falling back to `UTC`.
+
+Credit: NC. Found while verifying the MCP migration end to end — `claude mcp list` reported the server healthy, which is exactly why this class of bug survives. Fourth instance of the root pattern: something is written correctly, and the thing meant to consume it isn't where the writer assumed.
+
 ## 0.1.2 — 2026-07-27
 
 - **fix**: `.tmux.conf` was baked into `/root/` but tmux reads from `$HOME/.tmux.conf` (`/data/home/.tmux.conf`) at runtime — mouse mode and scrollback were silently running on stock defaults. `cont-init.d/10-env.sh` now copies the baked config into `$HOME` on first boot, guarded so user edits are preserved on subsequent starts.
