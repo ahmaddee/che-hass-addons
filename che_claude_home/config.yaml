@@ -1,7 +1,7 @@
 ---
 name: "CHE Claude in HomE Assistant"
 description: "Claude Code, resilience-first. Sessions survive restarts, everything persists in /data, real scrollback, first-class HA helpers. A fresh take on running Anthropic's Claude Code CLI inside Home Assistant."
-version: "0.1.0"
+version: "0.1.1"
 slug: "che_claude_home"
 init: false
 
@@ -19,11 +19,13 @@ panel_icon: mdi:home-heart-outline
 panel_title: "CHE Claude"
 panel_admin: true
 
-# Port configuration
+# Ingress-only by default. No host-port map, so this add-on can run in parallel
+# with other Claude Code add-ons that also use 7681 internally. Users who want
+# direct LAN access can map the port themselves via HA's addon Network config.
 ports:
-  7681/tcp: 7681
+  7681/tcp: null
 ports_description:
-  7681/tcp: "ttyd web terminal (also served via ingress)"
+  7681/tcp: "ttyd web terminal (ingress; set a host port to expose on LAN)"
 
 # Volume mappings — full HA config access + share for cross-add-on data
 map:
@@ -40,8 +42,6 @@ homeassistant_api: true
 auth_api: true
 
 startup: services
-
-webui: http://[HOST]:[PORT:7681]/
 
 # ─────────────────────────────────────────────────────────────
 # User-facing options

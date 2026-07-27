@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 — 2026-07-27
+
+- **fix**: drop host port map on 7681 so the add-on can run in parallel with Claude Terminal Pro (also on 7681). Ingress still works out of the box; users wanting direct LAN access can set a host port via HA's Network config.
+- **cleanup**: remove `webui:` field (ingress is the primary access path).
+
 ## 0.1.0 — 2026-07-27
 
 Initial release. Development scaffold.
