@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8 — 2026-07-27
+
+- **fix**: the add-on never appeared in Home Assistant's sidebar. `panel_icon`, `panel_title` and `panel_admin` were all declared in `config.yaml`, but `ingress_panel: true` — the field that actually asks for a panel — was missing, so all three were inert. Reaching the terminal meant going through Settings → Add-ons → Open Web UI every time. Now appears as **CHE Claude** with `mdi:home-heart-outline`.
+- **note**: `panel_*` are manifest fields, so this cannot be patched on a running install — the Supervisor API returns 403 for manifest changes. It takes an add-on update to land.
+
 ## 0.1.7 — 2026-07-27
 
 - **fix**: the **Add-on page** button 404'd. Home Assistant 2026.x renamed add-ons to *apps* and moved the panel from `/hassio/addon/<slug>/info` to `/config/app/<slug>/info`. The route is now chosen from HA's core version at boot, so installs on earlier releases still get a working link.
