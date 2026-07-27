@@ -1,7 +1,7 @@
 ---
 name: "CHE Claude in HomE Assistant"
 description: "Claude Code, resilience-first. Sessions survive restarts, everything persists in /data, real scrollback, first-class HA helpers. A fresh take on running Anthropic's Claude Code CLI inside Home Assistant."
-version: "0.1.3"
+version: "0.1.4"
 slug: "che_claude_home"
 init: false
 

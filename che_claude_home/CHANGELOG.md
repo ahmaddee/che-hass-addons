@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4 — 2026-07-27
+
+- **fix**: scrolling in the browser terminal, properly this time. The cause was never mouse mode on its own — it was that tmux drives the outer terminal's **alternate screen**, which xterm.js gives no scrollback and where it translates wheel events into arrow keys. In a Claude Code session that meant scrolling up walked backwards through your own message history. `terminal-overrides` now strips the alternate-screen capability (`smcup@:rmcup@`) so tmux writes to the normal buffer, xterm.js owns the scrollback, and the wheel scrolls the page with a real scrollbar.
+- **change**: `set -g mouse off` is required alongside it — with mouse on, tmux captures the wheel for copy-mode and it never reaches xterm.js. The two settings only work as a pair, and the file says so at length so neither gets "cleaned up" in isolation.
+- **fix**: text selection, as a side effect of the same change. With mouse on, tmux captured drag events for its own selection, so click-dragging in the browser deselected immediately and users had to hold shift to bypass tmux. Normal click-drag selection now works.
+- **note**: side effects — exiting or detaching tmux no longer restores prior screen contents, and click-to-focus-pane / drag-to-resize are gone. `history-limit 100000` is kept for keyboard copy-mode (`Ctrl+A` then `[`).
+
+Credit: OG-Che spotted that Claude Terminal Pro scrolls correctly and this add-on didn't, which started the hunt. The actual mechanism came from Ahmad's description of the failure — *"it went up through the lines I sent, like if I pressed up"* — which is specifically what xterm.js does on the alternate screen, and is what identified the real cause after a first attempt (`mouse off` alone) made it worse. Verified by a scrollbar appearing in the browser, not by reading the config back.
+
 ## 0.1.3 — 2026-07-27
 
 - **fix**: the default `time` MCP server has never been able to start. `cont-init.d/30-skills-mcp.sh` seeded it as `uvx mcp-server-time`, but `uv`/`uvx` is not installed in this image. The failure is silent — the config is written, the boot log reports success, and the server simply never comes up. It now points at `/data/packages/python/venv/bin/mcp-server-time`.
