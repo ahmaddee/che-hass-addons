@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.11 — 2026-07-27
+
+- **fix**: the sidebar icon rendered blank. `panel_icon` was `mdi:home-heart-outline`, which is not a real Material Design icon — there is no outline variant of `home-heart`. An invalid icon name fails silently and draws nothing. Changed to `mdi:home-heart`, which is already used seven times elsewhere in this Home Assistant install and renders correctly.
+
+
 ## 0.1.10 — 2026-07-27
 
 - **fix**: reverts the wrong half of 0.1.8. `ingress_panel: true` is **not** a manifest field — Supervisor ignores it in `config.yaml`, so 0.1.8 shipped a key that did nothing while claiming to fix the sidebar. Whether an add-on appears in the sidebar is *user state*, toggled on the add-on page ("Show in sidebar") or set with `POST /addons/<slug>/options {"ingress_panel": true}`. The key is removed and the real mechanism documented in place.
