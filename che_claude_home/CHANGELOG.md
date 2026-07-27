@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.12 — 2026-07-27
+
+- **fix**: the 0.1.4 scrolling fix never reached anyone who already had a `/data/home/.tmux.conf`. `10-env.sh` seeded it with a `[ ! -f ]` guard — first boot only — so the corrected config sat unread in `/root/` for eight releases while the stale one kept `mouse on` with no alternate-screen override. Every apparent fix afterwards was a live `tmux set`, discarded by the next restart, which is exactly why the bug presented as intermittent and unreproducible.
+- **fix**: `10-env.sh` now repairs that one known-broken shape — `mouse on` **and** no `smcup@` — after backing it up to `.tmux.conf.bak-premouse`. That combination cannot scroll in a browser (tmux captures the wheel for copy-mode, xterm.js never sees it), so it is never a deliberate choice. Any other config, including customisations that keep `mouse on` intentionally alongside the override, is left untouched.
+- **note**: the giveaway was a yellow timestamp and line count in the top-right corner — tmux's copy-mode indicator. Nothing else draws that, and it identified the cause immediately after two wrong diagnoses.
+
+
 ## 0.1.11 — 2026-07-27
 
 - **fix**: the sidebar icon rendered blank. `panel_icon` was `mdi:home-heart-outline`, which is not a real Material Design icon — there is no outline variant of `home-heart`. An invalid icon name fails silently and draws nothing. Changed to `mdi:home-heart`, which is already used seven times elsewhere in this Home Assistant install and renders correctly.

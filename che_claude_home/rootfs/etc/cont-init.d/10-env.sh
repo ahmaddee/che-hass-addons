@@ -55,4 +55,22 @@ done
 if [ -f /root/.tmux.conf ] && [ ! -f "$DATA_HOME/.tmux.conf" ]; then
     cp /root/.tmux.conf "$DATA_HOME/.tmux.conf"
     bashio::log.info "[10-env] Seeded $DATA_HOME/.tmux.conf from image bake"
+
+# ...but "first-boot only" also means a shipped FIX never reaches anyone who
+# already has the file. 0.1.4 fixed scrolling in the baked config and it sat in
+# /root/ unread for eight releases, because /data/home/.tmux.conf already
+# existed. Every apparent fix after that was a live `tmux set`, undone by the
+# next restart — which is exactly why the bug looked intermittent.
+#
+# So: repair the one known-broken shape. A config with `mouse on` and no
+# alternate-screen override cannot scroll in a browser (tmux captures the wheel
+# for copy-mode; xterm.js never sees it). That combination is never a
+# deliberate user choice here, so replacing it is safe. Anything else — genuine
+# customisation — is left completely alone.
+elif [ -f /root/.tmux.conf ] && [ -f "$DATA_HOME/.tmux.conf" ] \
+     && grep -q '^set -g mouse on' "$DATA_HOME/.tmux.conf" \
+     && ! grep -q 'smcup@' "$DATA_HOME/.tmux.conf"; then
+    cp -a "$DATA_HOME/.tmux.conf" "$DATA_HOME/.tmux.conf.bak-premouse"
+    cp /root/.tmux.conf "$DATA_HOME/.tmux.conf"
+    bashio::log.warning "[10-env] Repaired pre-0.1.4 .tmux.conf (scrolling was broken; backup at .tmux.conf.bak-premouse)"
 fi
