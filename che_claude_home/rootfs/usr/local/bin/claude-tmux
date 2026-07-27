@@ -5,12 +5,21 @@
 # The service.d/ttyd script pre-creates the session on container start.
 # This wrapper is what ttyd hands each browser connection: attach if the
 # session exists, otherwise create it (defensive; shouldn't happen).
+#
+# Working directory: honours $CLAUDE_WORKDIR (exported by services.d/ttyd/run
+# from the `working_directory` addon option, default /config). Falls back to
+# $HOME if unset or nonexistent. Claude Code keys per-project memory by cwd,
+# so getting this right is not cosmetic.
 # ============================================================================
 set -e
+
+WORKDIR="${CLAUDE_WORKDIR:-/config}"
+[ -d "$WORKDIR" ] || WORKDIR="$HOME"
 
 if tmux has-session -t claude 2>/dev/null; then
     exec tmux attach-session -t claude
 else
-    # Fallback: create fresh session using the exported launch command
-    exec tmux new-session -s claude bash -c 'eval "${CLAUDE_LAUNCH_CMD:-claude}"'
+    # Fallback: create fresh session using the exported launch command.
+    # -c pins the starting cwd — see comment in services.d/ttyd/run.
+    exec tmux new-session -s claude -c "$WORKDIR" bash -c 'eval "${CLAUDE_LAUNCH_CMD:-claude}"'
 fi

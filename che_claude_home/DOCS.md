@@ -15,10 +15,15 @@ A web-based terminal that runs Anthropic's Claude Code CLI inside Home Assistant
 When true, opening the terminal drops you straight into `claude`. When false, you land on a session picker menu.
 
 ### `survive_restart` *(bool, default: true)*
-When true, Claude runs inside a persistent tmux session. Close the browser tab, come back later — same conversation, still there. Set to false if you want a fresh shell every time.
+When true, Claude runs inside a persistent tmux session. Close the browser tab, come back later — same conversation, still there.
+
+⚠️ **Setting this to `false` is not recommended.** ttyd sends SIGHUP to your shell on every WebSocket close — that includes tab-switches inside the HA sidebar, browser refreshes, and idle-disconnects. Without tmux holding the session, this means your Claude conversation dies **every time you tab away**. The tmux wrapper is what makes this add-on feel resilient; disabling it exposes an upstream ttyd behaviour that has no good workaround. Leave this at `true` unless you have a very specific reason to want fresh shells.
 
 ### `sidebar_title` *(string, default: "CHE Claude")*
 The label shown in HA's sidebar for this add-on. Requires an add-on restart to take effect.
+
+### `working_directory` *(string, default: "/config")*
+Where shells start when you open the terminal — and, importantly, where Claude Code keys per-project memory. `/config` (default) means Claude scopes memory to your HA config directory, which is usually what you want. Change this only if you have a specific reason; the path must exist inside the container or the add-on falls back to `$HOME` (`/data/home`).
 
 ### `dangerously_skip_permissions` *(bool, default: false)*
 Passes `--dangerously-skip-permissions` to Claude on launch. Skips all permission prompts — Claude will read, write, and execute without asking. **Only enable if you fully trust what you're about to do.**

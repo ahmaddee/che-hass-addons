@@ -43,3 +43,16 @@ for legacy in /root/.config/anthropic /root/.anthropic /config/claude-config; do
         touch "$legacy.migrated"
     fi
 done
+
+# Relocate the baked tmux.conf from /root/ (where the Dockerfile COPY dropped it,
+# because we built with WORKDIR=/config and no chowning) to $HOME (/data/home)
+# where tmux actually reads it — since we export HOME=/data/home. Without this
+# copy, tmux runs on stock defaults (mouse off, history 2000) even though our
+# rootfs has the "right" .tmux.conf. NC caught this the hard way.
+#
+# Guard [ ! -f ] means user edits to /data/home/.tmux.conf are preserved across
+# addon restarts. First-boot only.
+if [ -f /root/.tmux.conf ] && [ ! -f "$DATA_HOME/.tmux.conf" ]; then
+    cp /root/.tmux.conf "$DATA_HOME/.tmux.conf"
+    bashio::log.info "[10-env] Seeded $DATA_HOME/.tmux.conf from image bake"
+fi
