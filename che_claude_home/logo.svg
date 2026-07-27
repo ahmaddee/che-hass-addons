@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  CHE Claude in HomE Assistant — addon banner (250x100 aspect)
+  Icon on left, wordmark on right.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 200" width="500" height="200">
+  <defs>
+    <linearGradient id="houseGradL" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b6cff"/>
+      <stop offset="1" stop-color="#3f4bcc"/>
+    </linearGradient>
+    <linearGradient id="robotGradL" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8ee3ff"/>
+      <stop offset="1" stop-color="#4ac1e6"/>
+    </linearGradient>
+  </defs>
+  <rect width="500" height="200" fill="#f8f9ff"/>
+
+  <!-- Icon glyph on the left, scaled small -->
+  <g transform="translate(20,20) scale(0.312)">
+    <path d="
+        M 256 72
+        L 448 232
+        L 448 428
+        Q 448 448 428 448
+        L 84 448
+        Q 64 448 64 428
+        L 64 232
+        Z"
+      fill="url(#houseGradL)"/>
+    <rect x="120" y="248" width="272" height="176" rx="20" ry="20" fill="#f8f9ff"/>
+    <circle cx="256" cy="264" r="8" fill="url(#robotGradL)"/>
+    <rect x="252" y="272" width="8" height="18" rx="2" fill="url(#robotGradL)"/>
+    <rect x="200" y="288" width="112" height="80" rx="18" ry="18" fill="url(#robotGradL)"/>
+    <circle cx="228" cy="322" r="8" fill="#1a2340"/>
+    <circle cx="284" cy="322" r="8" fill="#1a2340"/>
+    <path d="M 240 348 Q 256 358 272 348" fill="none" stroke="#1a2340" stroke-width="5" stroke-linecap="round"/>
+    <rect x="188" y="374" width="136" height="52" rx="14" ry="14" fill="url(#robotGradL)"/>
+    <path d="M 256 400 c -6 -8, -18 -8, -18 2 c 0 8, 18 20, 18 20 c 0 0, 18 -12, 18 -20 c 0 -10, -12 -10, -18 -2 Z" fill="#ff6b8a"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g font-family="'SF Pro Display','Helvetica Neue',Arial,sans-serif">
+    <text x="200" y="90" font-size="42" font-weight="800" fill="#3f4bcc">
+      CHE Claude
+    </text>
+    <text x="200" y="130" font-size="24" font-weight="500" fill="#4ac1e6" letter-spacing="1">
+      in HomE Assistant
+    </text>
+    <text x="200" y="170" font-size="14" font-weight="400" fill="#7a8398" letter-spacing="0.5">
+      Claude Code, resilience-first
+    </text>
+  </g>
+</svg>

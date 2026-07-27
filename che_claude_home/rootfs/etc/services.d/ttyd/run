@@ -1,0 +1,80 @@
+#!/usr/bin/with-contenv bashio
+# ============================================================================
+# ttyd — the web terminal
+#
+# Attaches every browser connection to a persistent tmux session named 'claude'.
+# Sessions survive tab close, iframe reload, and add-on restart (except a
+# hard container recreate, which is rare).
+# ============================================================================
+set -e
+
+PORT="${TTYD_PORT:-7681}"
+SURVIVE=$(bashio::config 'survive_restart' 'true')
+AUTO_LAUNCH=$(bashio::config 'auto_launch_claude' 'true')
+DANGEROUS=$(bashio::config 'dangerously_skip_permissions' 'false')
+
+bashio::log.info "[ttyd] starting on port ${PORT}"
+bashio::log.info "[ttyd]   survive_restart=${SURVIVE}"
+bashio::log.info "[ttyd]   auto_launch_claude=${AUTO_LAUNCH}"
+
+# Export env for the shells ttyd spawns (mirrors /etc/profile.d/che-env.sh
+# so services.d and cont-init.d see the same paths).
+export HOME="/data/home"
+export XDG_CONFIG_HOME="/data/.config"
+export XDG_CACHE_HOME="/data/.cache"
+export XDG_STATE_HOME="/data/.local/state"
+export XDG_DATA_HOME="/data/.local/share"
+export ANTHROPIC_CONFIG_DIR="/data/.config/claude"
+export ANTHROPIC_HOME="/data"
+export DISABLE_AUTOUPDATER=1
+export IS_SANDBOX=1
+export GH_CONFIG_DIR="/data/.config/gh"
+export PATH="/data/packages/bin:/data/packages/python/venv/bin:/data/home/.local/bin:/data/npm/bin:$PATH"
+
+# Build the Claude launch command
+CLAUDE_FLAGS=""
+if [ "$DANGEROUS" = "true" ]; then
+    CLAUDE_FLAGS="--dangerously-skip-permissions"
+    bashio::log.warning "[ttyd] Claude launching with --dangerously-skip-permissions"
+fi
+
+if [ "$AUTO_LAUNCH" = "true" ]; then
+    LAUNCH_CMD="clear && echo 'Welcome to CHE Claude in HomE Assistant' && echo '' && sleep 1 && claude ${CLAUDE_FLAGS}; /usr/local/bin/claude-session-picker"
+else
+    LAUNCH_CMD="clear && /usr/local/bin/claude-session-picker"
+fi
+
+export CLAUDE_LAUNCH_CMD="$LAUNCH_CMD"
+
+# Decide what ttyd hands each browser connection
+if [ "$SURVIVE" = "true" ]; then
+    # Persistent tmux: pre-create the 'claude' session so first connect is instant
+    if ! tmux has-session -t claude 2>/dev/null; then
+        bashio::log.info "[ttyd] creating persistent tmux session 'claude'"
+        tmux new-session -d -s claude bash -c 'eval "$CLAUDE_LAUNCH_CMD"'
+    else
+        bashio::log.info "[ttyd] reusing existing tmux session 'claude'"
+    fi
+    SHELL_CMD="/usr/local/bin/claude-tmux"
+else
+    # Fresh shell every connect (survive_restart=false)
+    SHELL_CMD="bash -c 'eval \"$CLAUDE_LAUNCH_CMD\"'"
+fi
+
+# ttyd flags:
+#   --writable                — allow keyboard input (not read-only viewer)
+#   --interface 0.0.0.0       — bind all interfaces (ingress needs this)
+#   --ping-interval 30        — keep websocket alive through proxies
+#   --client-option reconnect=5           — auto-reconnect after 5s
+#   --client-option scrollback=100000     — 100k line browser scrollback (THE fix)
+#   --client-option disableLeaveAlert=true — no "leave page?" prompt on tab close
+exec ttyd \
+    --port "${PORT}" \
+    --interface 0.0.0.0 \
+    --writable \
+    --ping-interval 30 \
+    --client-option reconnect=5 \
+    --client-option scrollback=100000 \
+    --client-option disableLeaveAlert=true \
+    --client-option 'theme={"background":"#1e1e2e"}' \
+    ${SHELL_CMD}

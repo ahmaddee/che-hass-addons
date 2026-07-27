@@ -1,0 +1,92 @@
+---
+name: "CHE Claude in HomE Assistant"
+description: "Claude Code, resilience-first. Sessions survive restarts, everything persists in /data, real scrollback, first-class HA helpers. A fresh take on running Anthropic's Claude Code CLI inside Home Assistant."
+version: "0.1.0"
+slug: "che_claude_home"
+init: false
+
+arch:
+  - aarch64
+  - amd64
+  - armv7
+
+url: "https://github.com/ahmaddee/che-hass-addons"
+
+# Web interface configuration
+ingress: true
+ingress_port: 7681
+panel_icon: mdi:home-heart-outline
+panel_title: "CHE Claude"
+panel_admin: true
+
+# Port configuration
+ports:
+  7681/tcp: 7681
+ports_description:
+  7681/tcp: "ttyd web terminal (also served via ingress)"
+
+# Volume mappings — full HA config access + share for cross-add-on data
+map:
+  - config:rw
+  - share:rw
+  - ssl:ro
+  - addons:ro
+  - backup:rw
+
+# API access for Home Assistant integration
+hassio_api: true
+hassio_role: manager
+homeassistant_api: true
+auth_api: true
+
+startup: services
+
+webui: http://[HOST]:[PORT:7681]/
+
+# ─────────────────────────────────────────────────────────────
+# User-facing options
+# ─────────────────────────────────────────────────────────────
+options:
+  # Startup behavior
+  auto_launch_claude: true
+  survive_restart: true
+  sidebar_title: "CHE Claude"
+
+  # Permission / trust
+  dangerously_skip_permissions: false
+
+  # Claude Code version management — three modes for three temperaments
+  #   baked          → whatever was pinned into this addon image (safest)
+  #   latest_npm     → npm install -g @anthropic-ai/claude-code@latest on every start (bleeding edge)
+  #   pinned_version → user specifies an exact version, e.g. "2.1.198" (rollback safety net)
+  claude_source: "baked"
+  claude_pinned_version: ""
+
+  # Feature toggles (opt-in for anything heavy or externally-facing)
+  enable_wa_watcher: false
+  enable_playwright: false
+  enable_image_upload: true
+  enable_mcp_defaults: true
+
+  # Persistent packages (survive restarts via persist-install)
+  persistent_apk_packages: []
+  persistent_pip_packages: []
+  persistent_npm_packages: []
+
+schema:
+  auto_launch_claude: bool?
+  survive_restart: bool?
+  sidebar_title: str?
+  dangerously_skip_permissions: bool?
+  claude_source: "list(baked|latest_npm|pinned_version)?"
+  claude_pinned_version: str?
+  enable_wa_watcher: bool?
+  enable_playwright: bool?
+  enable_image_upload: bool?
+  enable_mcp_defaults: bool?
+  persistent_apk_packages:
+    - str?
+  persistent_pip_packages:
+    - str?
+  persistent_npm_packages:
+    - str?

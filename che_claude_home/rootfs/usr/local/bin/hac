@@ -1,0 +1,109 @@
+#!/bin/bash
+# ============================================================================
+# hac — HA REST API wrapper
+#
+# Baked into the image so shells don't need to re-bootstrap a /tmp helper on
+# every session. Reads the HA token from secrets.yaml the first time it's
+# invoked, then caches it to /data/.cache/hac-token for the container's life.
+#
+# Usage:
+#   hac /api/states                        # list all entity states
+#   hac /api/states/sensor.temperature     # single entity
+#   hac -X POST /api/services/light/turn_on -d '{"entity_id":"light.foo"}'
+#
+# The token used is `claude_ha_token` in /config/secrets.yaml. It must be a
+# long-lived access token created for the user this addon should act as.
+# ============================================================================
+set -euo pipefail
+
+HA_HOST="${HA_HOST:-http://homeassistant.local.hass.io:8123}"
+CACHE_TOKEN="/data/.cache/hac-token"
+
+# Fallback: within the addon container, homeassistant is reachable at the
+# Supervisor-provided hostname too
+if ! curl --max-time 2 -sfI "$HA_HOST" >/dev/null 2>&1; then
+    if curl --max-time 2 -sfI http://supervisor/core >/dev/null 2>&1; then
+        HA_HOST="http://supervisor/core"
+    fi
+fi
+
+get_token() {
+    if [ -f "$CACHE_TOKEN" ]; then
+        cat "$CACHE_TOKEN"
+        return
+    fi
+
+    # Prefer SUPERVISOR_TOKEN when the addon has hassio_api access
+    if [ -n "${SUPERVISOR_TOKEN:-}" ] && [ "$HA_HOST" = "http://supervisor/core" ]; then
+        echo "$SUPERVISOR_TOKEN"
+        return
+    fi
+
+    # Fall back to secrets.yaml (Ahmad's setup)
+    local token=""
+    if [ -f /config/secrets.yaml ]; then
+        token=$(grep '^claude_ha_token:' /config/secrets.yaml 2>/dev/null | sed 's/.*: *//;s/"//g' | head -1)
+    fi
+    if [ -z "$token" ]; then
+        echo "hac: no token found — set HA_TOKEN env or claude_ha_token in /config/secrets.yaml" >&2
+        exit 1
+    fi
+    mkdir -p "$(dirname "$CACHE_TOKEN")"
+    echo "$token" > "$CACHE_TOKEN"
+    chmod 600 "$CACHE_TOKEN"
+    echo "$token"
+}
+
+show_help() {
+    cat <<'EOF'
+hac — Home Assistant REST API wrapper
+
+USAGE:
+    hac <path>                          # GET /api/<path>
+    hac -X METHOD <path> [-d BODY]      # any method with optional body
+
+EXAMPLES:
+    hac /api/states                                  # list all entities
+    hac /api/states/sensor.temperature               # single entity
+    hac -X POST /api/services/light/turn_on \
+        -d '{"entity_id":"light.living_room"}'
+    hac -X GET /api/config                           # HA config
+    hac /api/history/period                          # 24h history
+
+ENVIRONMENT:
+    HA_HOST     Override HA URL (default: auto-detect)
+    HA_TOKEN    Override token (default: SUPERVISOR_TOKEN or secrets.yaml)
+EOF
+}
+
+case "${1:-}" in
+    -h|--help|"") show_help; exit 0 ;;
+esac
+
+TOKEN="${HA_TOKEN:-$(get_token)}"
+
+# Build the curl command: if arg starts with /, treat as path; else pass through
+declare -a args=()
+path=""
+for a in "$@"; do
+    case "$a" in
+        /*)
+            if [ -z "$path" ]; then
+                path="$a"
+                continue
+            fi
+            ;;
+    esac
+    args+=("$a")
+done
+
+if [ -z "$path" ]; then
+    echo "hac: no path given" >&2
+    exit 1
+fi
+
+exec curl -sS \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    "${args[@]}" \
+    "${HA_HOST}${path}"

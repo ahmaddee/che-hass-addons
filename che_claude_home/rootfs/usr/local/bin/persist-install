@@ -1,0 +1,128 @@
+#!/bin/bash
+# ============================================================================
+# persist-install — install packages into /data/packages so they survive
+# container image rebuilds.
+#
+# Adapted from ESJavadex/claude-code-ha (MIT). Extended with --npm support.
+# ============================================================================
+
+PERSIST_ROOT="/data/packages"
+PERSIST_BIN="$PERSIST_ROOT/bin"
+PERSIST_PYTHON="$PERSIST_ROOT/python"
+PERSIST_NPM="/data/npm"
+
+show_help() {
+    cat <<'EOF'
+persist-install — install packages that survive container restarts
+
+USAGE:
+    persist-install <pkg1> [pkg2] ...            # Alpine apk packages
+    persist-install --python <pkg1> [pkg2] ...   # Python packages (venv)
+    persist-install --npm <pkg1> [pkg2] ...      # Global npm packages
+    persist-install --list                       # Show what's installed
+    persist-install --help
+
+EXAMPLES:
+    persist-install git vim htop
+    persist-install --python requests pandas
+    persist-install --npm @playwright/test typescript
+
+STORAGE:
+    apk    → /data/packages/bin (+ libs)
+    pip    → /data/packages/python/venv
+    npm    → /data/npm
+
+Everything under /data survives image rebuilds and add-on restarts.
+EOF
+}
+
+list_packages() {
+    echo "=== Persistent Packages ==="
+    echo ""
+    echo "System binaries ($PERSIST_BIN):"
+    if [ -d "$PERSIST_BIN" ] && [ -n "$(ls -A "$PERSIST_BIN" 2>/dev/null)" ]; then
+        ls -1 "$PERSIST_BIN" | sed 's/^/  - /'
+    else
+        echo "  (none)"
+    fi
+    echo ""
+    echo "Python packages ($PERSIST_PYTHON/venv):"
+    if [ -f "$PERSIST_PYTHON/venv/bin/pip" ]; then
+        # shellcheck disable=SC1091
+        source "$PERSIST_PYTHON/venv/bin/activate"
+        pip list --format=columns 2>/dev/null | tail -n +3 | sed 's/^/  - /'
+    else
+        echo "  (venv not initialized)"
+    fi
+    echo ""
+    echo "Global npm packages ($PERSIST_NPM):"
+    if [ -d "$PERSIST_NPM/lib/node_modules" ]; then
+        ls -1 "$PERSIST_NPM/lib/node_modules" 2>/dev/null | grep -v '^\.' | sed 's/^/  - /'
+    else
+        echo "  (none)"
+    fi
+    echo ""
+    echo "Total: $(du -sh "$PERSIST_ROOT" "$PERSIST_NPM" 2>/dev/null | awk '{s+=$1} END {print s}')"
+}
+
+install_apk_packages() {
+    [ "$#" -eq 0 ] && { echo "persist-install: no apk packages given"; return 1; }
+    echo "Installing apk packages: $*"
+    if ! apk add --no-cache "$@"; then
+        echo "persist-install: apk add failed"
+        exit 1
+    fi
+
+    mkdir -p "$PERSIST_BIN" "$PERSIST_ROOT/lib"
+    for pkg in "$@"; do
+        echo "  copying files for: $pkg"
+        apk info -L "$pkg" 2>/dev/null | while read -r file; do
+            case "$file" in
+                /usr/bin/*|/usr/sbin/*|/bin/*)
+                    if [ -f "$file" ] && [ -x "$file" ]; then
+                        cp -a "$file" "$PERSIST_BIN/" 2>/dev/null
+                    fi
+                    ;;
+                /usr/lib/*.so*|/lib/*.so*)
+                    if [ -f "$file" ]; then
+                        cp -a "$file" "$PERSIST_ROOT/lib/" 2>/dev/null
+                    fi
+                    ;;
+            esac
+        done
+    done
+    echo "Done. Packages persist across rebuilds."
+}
+
+install_python_packages() {
+    [ "$#" -eq 0 ] && { echo "persist-install: no python packages given"; return 1; }
+    if [ ! -f "$PERSIST_PYTHON/venv/bin/python" ]; then
+        echo "First-time setup: creating Python venv at $PERSIST_PYTHON/venv"
+        command -v python3 >/dev/null 2>&1 || install_apk_packages python3 py3-pip
+        mkdir -p "$PERSIST_PYTHON"
+        python3 -m venv "$PERSIST_PYTHON/venv"
+    fi
+    # shellcheck disable=SC1091
+    source "$PERSIST_PYTHON/venv/bin/activate"
+    pip install --upgrade pip -q
+    pip install "$@"
+}
+
+install_npm_packages() {
+    [ "$#" -eq 0 ] && { echo "persist-install: no npm packages given"; return 1; }
+    mkdir -p "$PERSIST_NPM"
+    NPM_CONFIG_PREFIX="$PERSIST_NPM" npm install -g "$@"
+}
+
+if [ ! -d /data ]; then
+    echo "persist-install: /data not found — are you running this outside the addon?"
+    exit 1
+fi
+
+case "${1:-}" in
+    --help|-h|help|"") show_help ;;
+    --list|-l|list)    list_packages ;;
+    --python|-p)       shift; install_python_packages "$@" ;;
+    --npm|-n)          shift; install_npm_packages "$@" ;;
+    *)                 install_apk_packages "$@" ;;
+esac

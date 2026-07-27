@@ -1,0 +1,116 @@
+#!/bin/bash
+# ============================================================================
+# claude-session-picker — interactive session menu
+#
+# Shown when auto_launch_claude=false, or when Claude exits from an auto-launch
+# session. Loops so exiting Claude returns here, not to the shell prompt.
+# ============================================================================
+set -u
+
+CLAUDE_BIN="/usr/local/bin/claude"
+DANGEROUS_FLAG=""
+
+# Read the danger flag from the addon config once at start
+if [ -f /data/options.json ]; then
+    if jq -r '.dangerously_skip_permissions // false' /data/options.json | grep -q true; then
+        DANGEROUS_FLAG="--dangerously-skip-permissions"
+    fi
+fi
+
+banner() {
+    clear
+    cat <<'BANNER'
+╔══════════════════════════════════════════════════════════════════╗
+║              CHE Claude in HomE Assistant                        ║
+║                     Session picker                               ║
+╚══════════════════════════════════════════════════════════════════╝
+BANNER
+    local ver="unknown"
+    if command -v claude >/dev/null 2>&1; then
+        ver=$(timeout 5 "$CLAUDE_BIN" --version 2>/dev/null || echo "unknown")
+    fi
+    echo "  Claude Code version: $ver"
+    if [ -n "$DANGEROUS_FLAG" ]; then
+        echo "  Mode: --dangerously-skip-permissions (unrestricted)"
+    fi
+    echo ""
+}
+
+menu() {
+    cat <<'MENU'
+  1) New interactive session
+  2) Continue most recent conversation (-c)
+  3) Resume from conversation list (-r)
+  4) Custom claude command
+  5) GitHub CLI login (gh auth)
+  6) Drop to bash shell
+  7) Exit
+MENU
+    echo ""
+}
+
+github_auth() {
+    echo ""
+    if ! command -v gh >/dev/null 2>&1; then
+        echo "gh is not installed — this shouldn't happen. Report an issue."
+        read -r -p "Press Enter to return... " _
+        return
+    fi
+    if gh auth status 2>/dev/null; then
+        echo ""
+        echo "Already authenticated. Options:"
+        echo "  1) Keep current login"
+        echo "  2) Log in to a different account"
+        read -r -p "Choice [1]: " ac
+        [ "$ac" != "2" ] && return
+    fi
+    echo ""
+    echo "Choose authentication method:"
+    echo "  1) Browser (requires a browser you can open the printed URL in)"
+    echo "  2) Personal access token (recommended for headless containers)"
+    read -r -p "Choice [2]: " method
+    case "${method:-2}" in
+        1) gh auth login --web ;;
+        *)
+            echo ""
+            echo "Create a token at: https://github.com/settings/tokens"
+            echo "Scopes: repo, read:org, workflow"
+            echo ""
+            gh auth login -p https -h github.com
+            ;;
+    esac
+    echo ""
+    gh auth status 2>/dev/null && echo "Auth successful. Credentials persist in $GH_CONFIG_DIR"
+    read -r -p "Press Enter to return... " _
+}
+
+while true; do
+    banner
+    menu
+    read -r -p "Choice [1-7] (default 1): " choice
+    choice=$(echo "${choice:-1}" | tr -d '[:space:]')
+    case "$choice" in
+        1) "$CLAUDE_BIN" $DANGEROUS_FLAG ;;
+        2) "$CLAUDE_BIN" -c $DANGEROUS_FLAG ;;
+        3) "$CLAUDE_BIN" -r $DANGEROUS_FLAG ;;
+        4)
+            echo ""
+            read -r -p "> claude " args
+            if [ -z "$args" ]; then
+                "$CLAUDE_BIN" $DANGEROUS_FLAG
+            else
+                eval "$CLAUDE_BIN $args $DANGEROUS_FLAG"
+            fi
+            ;;
+        5) github_auth ;;
+        6)
+            echo "Type 'exit' to return to the picker."
+            bash
+            ;;
+        7) echo "Bye"; exit 0 ;;
+        *)
+            echo "Invalid choice: '$choice'"
+            read -r -p "Press Enter to continue... " _
+            ;;
+    esac
+done
