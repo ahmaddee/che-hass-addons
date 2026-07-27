@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.10 — 2026-07-27
+
+- **fix**: reverts the wrong half of 0.1.8. `ingress_panel: true` is **not** a manifest field — Supervisor ignores it in `config.yaml`, so 0.1.8 shipped a key that did nothing while claiming to fix the sidebar. Whether an add-on appears in the sidebar is *user state*, toggled on the add-on page ("Show in sidebar") or set with `POST /addons/<slug>/options {"ingress_panel": true}`. The key is removed and the real mechanism documented in place.
+- **note**: `panel_icon`, `panel_title` and `panel_admin` **do** work and always did. They are simply absent from the `/addons/<slug>/info` response, which makes them look inert when queried there. HA renders the panel as `title: "CHE Claude"`, `icon: mdi:home-heart-outline` — confirmed via the frontend's own `get_panels`. Ask HA what it is rendering, not Supervisor what it stored.
+
 ## 0.1.9 — 2026-07-27
 
 - **removed**: `sidebar_title`. It was declared in the schema and read by nothing. It also cannot work as designed — `panel_title` is an add-on *manifest* field, and the Supervisor API returns 403 for manifest changes on a running install, so no runtime option can rename the sidebar entry. The name is now simply fixed at "CHE Claude".
