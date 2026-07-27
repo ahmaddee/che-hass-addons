@@ -19,9 +19,6 @@ When true, Claude runs inside a persistent tmux session. Close the browser tab, 
 
 ⚠️ **Setting this to `false` is not recommended.** ttyd sends SIGHUP to your shell on every WebSocket close — that includes tab-switches inside the HA sidebar, browser refreshes, and idle-disconnects. Without tmux holding the session, this means your Claude conversation dies **every time you tab away**. The tmux wrapper is what makes this add-on feel resilient; disabling it exposes an upstream ttyd behaviour that has no good workaround. Leave this at `true` unless you have a very specific reason to want fresh shells.
 
-### `sidebar_title` *(string, default: "CHE Claude")*
-The label shown in HA's sidebar for this add-on. Requires an add-on restart to take effect.
-
 ### `working_directory` *(string, default: "/config")*
 Where shells start when you open the terminal — and, importantly, where Claude Code keys per-project memory. `/config` (default) means Claude scopes memory to your HA config directory, which is usually what you want. Change this only if you have a specific reason; the path must exist inside the container or the add-on falls back to `$HOME` (`/data/home`).
 
@@ -39,7 +36,6 @@ Only used when `claude_source: pinned_version`. Enter an exact npm version strin
 
 ### Feature toggles
 
-- `enable_wa_watcher` *(bool, default: false)* — Enables the WhatsApp bridge daemon (see WhatsApp section below)
 - `enable_playwright` *(bool, default: false)* — Installs Chromium + Playwright MCP for browser automation. Heavy install, only turn on if you need it.
 - `enable_image_upload` *(bool, default: true)* — Enables the image-paste service that lets you drop screenshots into the terminal
 - `enable_mcp_defaults` *(bool, default: true)* — Seeds `~/.claude/settings.json` with sensible default MCP servers (HA + time)
