@@ -128,3 +128,55 @@ Removing the add-on **does not** delete `/data`. If you reinstall later, your au
 ## Support
 
 Open an issue at [ahmaddee/che-hass-addons](https://github.com/ahmaddee/che-hass-addons/issues).
+
+## The top bar
+
+A persistent bar sits above the terminal showing the add-on name and version, with:
+
+- **Reconnect** — re-attaches your browser to the terminal session. Non-destructive: your Claude
+  conversation and shell state are untouched. Use it if the terminal looks frozen or the WebSocket
+  has dropped.
+- **Add-on page ↗** — opens this add-on's page in Home Assistant, where Restart lives.
+
+If the bar fails to build for any reason, the add-on falls back to ttyd's stock interface. A broken
+top bar never costs you your terminal.
+
+### Why there is no Restart button in the bar
+
+A restart control served *by* this container cannot rescue this container when its terminal is
+wedged — which is the only situation you'd reach for it in. Put the reliable one in Home Assistant
+instead, where it keeps working no matter what this add-on is doing:
+
+```yaml
+# packages/che_control.yaml
+che_control:
+  script:
+    restart_che_claude_addon:
+      alias: "Restart CHE Claude add-on"
+      icon: mdi:robot-outline
+      sequence:
+        - action: hassio.addon_restart
+          data:
+            addon: 5d905c53_che_claude_home
+      mode: single
+```
+
+Add that to a dashboard as a button card. **Restarting is safe for your conversation** — `/data`
+persists across restarts and Claude Code writes each turn to its session file as it happens. A
+restart costs you the running process, not your history. Afterwards, `claude --continue` picks the
+conversation back up.
+
+## Getting files in (images, logs, screenshots)
+
+Claude Code reads images natively, but a browser terminal cannot paste one. Options, easiest first:
+
+1. **HA Media browser** — Settings → Media → upload. Pure browser, lands in `/media`.
+2. **Samba** — drop into `\\homeassistant\share\che-uploads`.
+3. **File Editor add-on** — upload into `/config`.
+4. **Drag onto the terminal** — with `enable_image_upload` on, the trzsz receiver is installed and
+   ttyd's built-in trzsz client handles the transfer. Note that Claude Code occupies the terminal,
+   so there is no shell prompt to run `trz` from; ask Claude to open a popup for you
+   (`tmux display-popup -E trz`), then drag the file onto the window.
+
+Then just tell Claude where it is, or say "check uploads". There is no watcher and no background
+daemon — you are the trigger.

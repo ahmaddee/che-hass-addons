@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.6 — 2026-07-27
+
+- **fix**: `enable_image_upload` did nothing. It has been present in `config.yaml` and in the schema with **no implementation anywhere in the repo** — toggling it changed nothing, silently, with no error. New `cont-init.d/35-image-upload.sh` installs the trzsz receiver when the option is on. ttyd 1.7.7 already ships the entire client half (`TrzszAddon`, `TrzszUploadFiles`, and `trzszDragInitTimeout` for drag-and-drop); only the binary on this side was missing. No sidecar, no extra port, no HTTP endpoint.
+- **new**: `/share/che-uploads` is created with a README covering the ways files can arrive — HA Media browser, Samba, File Editor, or a trzsz popup. No watcher and no daemon: the user is the trigger.
+- **removed**: the in-page Restart button shipped in 0.1.5. It posted to `/api/hassio/addons/self/restart` on the browser's HA session and returns **401** — HA's API authenticates by `Authorization: Bearer`, not by cookie, and the browser cannot reach `http://supervisor` at all. Replaced with **Add-on page ↗**, which navigates to this add-on's page in Home Assistant where Restart actually lives.
+- **note**: even had it authenticated, it was the wrong shape. A control served *by* this container cannot rescue this container when its terminal is wedged, which is the only situation anyone reaches for it. The dependable path is a Home Assistant script calling `hassio.addon_restart`, which runs in HA Core — see DOCS.md.
+- **not shipped**: a voice-input button. Claude Code has `/voice` built in, so it would have been pure duplication. Caught before it was built.
+
 ## 0.1.5 — 2026-07-27
 
 - **new**: persistent top bar above the terminal, showing the add-on name and version with **Reconnect** and **Restart add-on** buttons. No new services, no new ports, no new dependencies.

@@ -21,8 +21,9 @@
 # ============================================================================
 set -euo pipefail
 
-OUT="${1:?usage: build-ttyd-shell <output-path> [version]}"
+OUT="${1:?usage: build-ttyd-shell <output-path> [version] [addon-slug]}"
 VERSION="${2:-}"
+SLUG="${3:-}"
 PROBE_PORT="${TTYD_PROBE_PORT:-7999}"
 BAR_HEIGHT="40px"
 
@@ -116,6 +117,7 @@ CSS
 
 read -r -d '' CHE_BAR <<HTML || true
 <script id="che-bar-script">
+window.__CHE_SLUG__ = '${SLUG}';
 (function () {
   // The bar is built in JS and appended AFTER load, not written into the static
   // HTML. ttyd mounts its UI with preact via render(h(App), document.body),
@@ -132,7 +134,7 @@ read -r -d '' CHE_BAR <<HTML || true
       '<span class="che-ver">${VERSION:+v}${VERSION}</span>' +
       '<span class="che-spacer"></span>' +
       '<button id="che-reconnect" title="Re-attach this browser to the terminal session. Does not affect your Claude conversation.">Reconnect</button>' +
-      '<button id="che-restart" title="Restart the whole add-on container. Your conversation history is preserved.">Restart add-on</button>';
+      '<button id="che-addon-page" title="Open this add-on\'s page in Home Assistant, where Restart lives. Restarting is safe for your conversation — /data persists and each turn is already written to disk.">Add-on page ↗</button>';
     document.body.appendChild(bar);
     wire();
   }
@@ -144,48 +146,20 @@ read -r -d '' CHE_BAR <<HTML || true
     location.reload();
   });
 
-  // Restart: two-step. The button this replaces exists because of a wedged
-  // terminal and a real panic — it should not itself be one misclick from
-  // killing the container.
-  var btn = document.getElementById('che-restart');
-  var LABEL = btn.textContent;
-  var armed = false, timer = null;
-
-  btn.addEventListener('click', function () {
-    if (!armed) {
-      armed = true;
-      btn.textContent = 'Confirm restart?';
-      btn.classList.add('che-danger');
-      timer = setTimeout(function () {
-        armed = false;
-        btn.textContent = LABEL;
-        btn.classList.remove('che-danger');
-      }, 3000);
-      return;
-    }
-    clearTimeout(timer);
-    armed = false;
-    btn.disabled = true;
-    btn.textContent = 'Restarting...';
-
-    // The browser cannot reach http://supervisor (Docker-internal, and the
-    // token must never ship client-side), so this goes through Home
-    // Assistant's own Supervisor proxy using the session already in the
-    // browser. If HA rejects it, say so plainly rather than appearing to work.
-    fetch('/api/hassio/addons/self/restart', {
-      method: 'POST',
-      credentials: 'same-origin'
-    }).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      btn.textContent = 'Restarting...';
-      setTimeout(function () { location.reload(); }, 15000);
-    }).catch(function (e) {
-      btn.disabled = false;
-      btn.classList.remove('che-danger');
-      btn.textContent = 'Restart failed';
-      console.error('[che] restart failed:', e);
-      setTimeout(function () { btn.textContent = LABEL; }, 4000);
-    });
+  // No in-page restart button. 0.1.5 shipped one that POSTed to
+  // /api/hassio/addons/self/restart on the browser's HA session; it returns 401,
+  // because HA's API authenticates by Authorization: Bearer, not by cookie. And
+  // the browser cannot reach http://supervisor directly — it is Docker-internal,
+  // and the token must never ship client-side.
+  //
+  // Even if it had worked it would have been the wrong shape: a control served
+  // BY this container cannot rescue this container when its terminal is wedged,
+  // which is the only situation anyone reaches for it. The real answer lives in
+  // Home Assistant Core — either the add-on page below, or a script calling
+  // hassio.addon_restart. See DOCS.md.
+  document.getElementById('che-addon-page').addEventListener('click', function () {
+    var url = '/hassio/addon/' + (window.__CHE_SLUG__ || 'self') + '/info';
+    try { window.top.location.href = url; } catch (e) { window.open(url, '_blank'); }
   });
   }
 
