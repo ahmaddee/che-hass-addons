@@ -10,6 +10,18 @@ arch:
   - amd64
   - armv7
 
+# Pull prebuilt images from ghcr instead of building from source on the user's
+# machine. `{arch}` is substituted by Supervisor against the arch list above.
+#
+# ⚠️ This key makes installs a pull, not a build — so a published image MUST
+# exist for every version this file ever declares. Bumping `version:` before CI
+# has finished publishing that tag breaks install and update for everyone until
+# the build lands. Bump version and let the build go green before announcing.
+#
+# The three packages must also stay PUBLIC. If any flips back to private,
+# installs fail for everyone without ghcr credentials.
+image: "ghcr.io/ahmaddee/{arch}-che_claude_home"
+
 url: "https://github.com/ahmaddee/che-hass-addons"
 
 # Web interface configuration
