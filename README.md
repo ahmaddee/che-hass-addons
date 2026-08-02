@@ -33,6 +33,8 @@ In Home Assistant:
 
 MIT — use it, change it, ship it, sell it. See [LICENSE](./LICENSE).
 
+Upstream projects this one builds on are credited in [NOTICE](./NOTICE).
+
 ## Contributing
 
 Issues and PRs welcome. This is a personal project maintained by [@ahmaddee](https://github.com/ahmaddee), but the goal is to make it useful to anyone running Claude Code inside Home Assistant.
