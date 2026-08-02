@@ -1,3 +1,28 @@
+## 0.1.14
+
+**Refines 0.1.13: the Home Assistant credential is now a reference, not a value.**
+
+- **changed**: the seeded `homeassistant` entry stores the literal string
+  `"Bearer ${SUPERVISOR_TOKEN}"` rather than the expanded token. Claude Code performs environment
+  variable expansion in user-scoped `~/.claude.json` entries — `headers` is explicitly among the
+  supported fields — so it resolves to the live token at load time.
+
+  Why it matters: Supervisor mints a **new** token on every add-on start (`secrets.token_hex(56)`),
+  so 0.1.13's literal write had to be refreshed on every boot to stay valid. Referencing instead of
+  embedding removes the need for any refresh at all — there is no stale state to go stale.
+
+  It's also better security posture: the token never lands on disk, never in a backup, never in a
+  diff or a screenshot. It exists only in the running container's environment.
+
+  If `SUPERVISOR_TOKEN` were somehow unset, the config still loads: Claude Code reports a
+  missing-variable warning in `claude mcp list` and passes the literal text through, which fails
+  cleanly with a 401 rather than crashing.
+
+- **general rule this produced**: *anything derived from a per-boot value must be refreshed per boot —
+  unless you can reference it instead of embedding it, in which case the refresh problem disappears.*
+  Prefer the reference. It converts "must remember to refresh" into "no refresh is possible or
+  needed."
+
 ## 0.1.13
 
 **Home Assistant control now works out of the box — no token, no setup.**

@@ -90,43 +90,50 @@ if bashio::config.true 'enable_mcp_defaults'; then
         # a false failure. A per-server timeout raises it. Needs Claude Code
         # >= 2.1.203.
         #
-        # ⚠️ SUPERVISOR_TOKEN is injected per container start, so this is
-        # REFRESHED ON EVERY BOOT rather than seeded once behind a `[ ! -f ]`
-        # guard. A first-boot-only guard would bake in a token that goes stale on
-        # the next restart, and the symptom would look exactly like the SSE
-        # session bug for an entirely different reason.
+        # ⚠️ THE CREDENTIAL IS A REFERENCE, NOT A VALUE.
+        #
+        # Supervisor mints a brand-new SUPERVISOR_TOKEN on *every* add-on start
+        # (`secrets.token_hex(56)` in supervisor/apps/app.py), so a token written
+        # literally into this file would be stale the moment the container next
+        # restarts — presenting as "HA control mysteriously dead after a restart",
+        # indistinguishable from the SSE session bug but with a different cause.
+        #
+        # Writing the literal string `${SUPERVISOR_TOKEN}` sidesteps that
+        # entirely: Claude Code expands it from the process environment at load
+        # time, so it always resolves to the current token and this file never
+        # needs rewriting. Documented for "a local- or user-scoped server entry in
+        # ~/.claude.json", with `headers` explicitly among the supported fields.
+        #
+        # Consequence worth keeping: the token never lands on disk, never in a
+        # backup, never in a diff or a screenshot. It exists only in the running
+        # container's environment.
+        #
+        # If SUPERVISOR_TOKEN is somehow unset the config still loads — Claude
+        # Code reports a missing-variable warning in `claude mcp list` and passes
+        # the literal text through, which 401s cleanly rather than crashing.
         HA_URL="http://supervisor/core/api/mcp"
 
-        if [ -z "${SUPERVISOR_TOKEN:-}" ]; then
-            bashio::log.warning "[30-skills] SUPERVISOR_TOKEN unset — skipping Home Assistant MCP seed"
+        # Only manage this entry while it still points at our URL. If the user has
+        # repointed it at their own HA instance with their own token, leave it be.
+        EXISTING_URL="$(jq -r '.mcpServers.homeassistant.url // ""' "$CLAUDE_JSON")"
+        if [ -n "$EXISTING_URL" ] && [ "$EXISTING_URL" != "$HA_URL" ]; then
+            bashio::log.info "[30-skills] homeassistant MCP is user-customised (${EXISTING_URL}) — not touching it"
         else
-            # Only manage this entry while it still points at our URL. If the
-            # user has repointed it at their own HA instance with their own
-            # token, leave it completely alone.
-            EXISTING_URL="$(jq -r '.mcpServers.homeassistant.url // ""' "$CLAUDE_JSON")"
-            if [ -n "$EXISTING_URL" ] && [ "$EXISTING_URL" != "$HA_URL" ]; then
-                bashio::log.info "[30-skills] homeassistant MCP is user-customised (${EXISTING_URL}) — not touching it"
+            TMP="$(mktemp)"
+            if jq --arg url "$HA_URL" '
+                  .mcpServers //= {} |
+                  .mcpServers.homeassistant = {
+                    type: "http",
+                    url: $url,
+                    headers: { Authorization: "Bearer ${SUPERVISOR_TOKEN}" },
+                    timeout: 900000
+                  }' "$CLAUDE_JSON" > "$TMP" && jq -e . "$TMP" >/dev/null 2>&1; then
+                cat "$TMP" > "$CLAUDE_JSON"   # preserve inode/permissions
+                rm -f "$TMP"
+                bashio::log.info "[30-skills] Home Assistant MCP configured (${HA_URL})"
             else
-                TMP="$(mktemp)"
-                if jq --arg tok "$SUPERVISOR_TOKEN" --arg url "$HA_URL" '
-                      .mcpServers //= {} |
-                      .mcpServers.homeassistant = {
-                        type: "http",
-                        url: $url,
-                        headers: { Authorization: ("Bearer " + $tok) },
-                        timeout: 900000
-                      }' "$CLAUDE_JSON" > "$TMP" && jq -e . "$TMP" >/dev/null 2>&1; then
-                    cat "$TMP" > "$CLAUDE_JSON"   # preserve inode/permissions
-                    rm -f "$TMP"
-                    if [ -z "$EXISTING_URL" ]; then
-                        bashio::log.info "[30-skills] Seeded Home Assistant MCP (${HA_URL})"
-                    else
-                        bashio::log.info "[30-skills] Refreshed Home Assistant MCP token"
-                    fi
-                else
-                    rm -f "$TMP"
-                    bashio::log.warning "[30-skills] Failed to write Home Assistant MCP entry — leaving config untouched"
-                fi
+                rm -f "$TMP"
+                bashio::log.warning "[30-skills] Failed to write Home Assistant MCP entry — leaving config untouched"
             fi
         fi
 
