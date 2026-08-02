@@ -9,6 +9,26 @@ A web-based terminal that runs Anthropic's Claude Code CLI inside Home Assistant
 3. **Open the Web UI.** You'll see a terminal and Claude's OAuth prompt on first launch. Log in with your Anthropic account.
 4. That's it. Your auth persists across restarts.
 
+## First-boot behaviour — what gets configured for you
+
+On first start this add-on wires Claude Code up to your Home Assistant automatically, so you don't
+have to create a token or edit any config. Specifically it registers a `homeassistant` MCP server in
+`~/.claude.json` pointing at Home Assistant through the Supervisor proxy, authenticated with the
+add-on's own credentials.
+
+**What Claude can actually touch is controlled by you, in Home Assistant — not by this add-on.**
+Claude can only act on entities you have exposed under **Settings → Voice assistants → Expose**. On a
+fresh Home Assistant that list is empty, so the tools are present but every call comes back with
+nothing matched until you deliberately expose something. Expose the lamp, and Claude can switch the
+lamp; nothing else.
+
+The credential is stored as a *reference* (`${SUPERVISOR_TOKEN}`), never as a value, so your token is
+never written to disk, into a backup, or into a screenshot.
+
+To turn all of this off, set `enable_mcp_defaults: false` in the add-on configuration. If you'd rather
+point Claude at a different Home Assistant with your own token, just edit the entry — the add-on
+detects a changed URL and will not overwrite your settings.
+
 ## Configuration
 
 ### `auto_launch_claude` *(bool, default: true)*

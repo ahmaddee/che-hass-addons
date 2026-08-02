@@ -1,3 +1,27 @@
+## 0.1.15
+
+**Review pass on 0.1.13/0.1.14 — user-config preservation, atomic writes, and visibility.**
+
+- **changed**: the `homeassistant` entry is now written with surgical field assignment rather than
+  wholesale replacement. `//=` initialises only what's missing, so a user's extra headers and their
+  own `timeout` survive; only `url` and `headers.Authorization` are managed. Overwriting the
+  credential is a repair rather than a stomp — that URL is the Supervisor proxy, which accepts
+  `SUPERVISOR_TOKEN` and 401s anything else, so it is the only value that can work there.
+
+- **fixed**: all config writes are now atomic (`mktemp -p` in the target directory + `mv -f`).
+  Previously a crash mid-`cat` could leave a truncated `~/.claude.json` — recoverable, since the next
+  boot's validity guard would skip it, but Claude Code couldn't read it in the meantime. `mktemp -p`
+  matters: the default `/tmp` is tmpfs, and a cross-filesystem `mv` silently degrades to copy+unlink
+  and loses atomicity.
+
+- **added**: DOCS gains a **First-boot behaviour** section, and the boot log now states plainly what
+  was configured, that access is gated by Voice-assistant exposure (empty by default), and how to
+  turn it off. Auto-wiring on install is a reasonable default; doing it invisibly is not.
+
+Credit: OG-Che reviewed 0.1.14 and caught the header-clobbering and non-atomic write. The exposure
+gate is what makes `enable_mcp_defaults: true` a defensible default — MCP is wired for you, but the
+house stays shut until you open specific entities yourself.
+
 ## 0.1.14
 
 **Refines 0.1.13: the Home Assistant credential is now a reference, not a value.**

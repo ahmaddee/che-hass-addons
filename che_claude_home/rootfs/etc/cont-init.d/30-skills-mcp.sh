@@ -119,18 +119,33 @@ if bashio::config.true 'enable_mcp_defaults'; then
         if [ -n "$EXISTING_URL" ] && [ "$EXISTING_URL" != "$HA_URL" ]; then
             bashio::log.info "[30-skills] homeassistant MCP is user-customised (${EXISTING_URL}) — not touching it"
         else
-            TMP="$(mktemp)"
+            # Surgical field assignment, not wholesale replacement. `//=` only
+            # initialises when missing, so anything else the user has added — an
+            # extra header, a longer timeout — survives. We own exactly the
+            # credential path and the URL; they own the rest.
+            #
+            # Overwriting Authorization here is a repair, not a stomp: this URL is
+            # the Supervisor proxy, which accepts SUPERVISOR_TOKEN and 401s
+            # anything else, so it is the only credential that can work.
+            TMP="$(mktemp -p "$(dirname "$CLAUDE_JSON")")"
             if jq --arg url "$HA_URL" '
                   .mcpServers //= {} |
-                  .mcpServers.homeassistant = {
-                    type: "http",
-                    url: $url,
-                    headers: { Authorization: "Bearer ${SUPERVISOR_TOKEN}" },
-                    timeout: 900000
-                  }' "$CLAUDE_JSON" > "$TMP" && jq -e . "$TMP" >/dev/null 2>&1; then
-                cat "$TMP" > "$CLAUDE_JSON"   # preserve inode/permissions
-                rm -f "$TMP"
-                bashio::log.info "[30-skills] Home Assistant MCP configured (${HA_URL})"
+                  .mcpServers.homeassistant //= {} |
+                  .mcpServers.homeassistant.type = "http" |
+                  .mcpServers.homeassistant.url = $url |
+                  .mcpServers.homeassistant.headers //= {} |
+                  .mcpServers.homeassistant.headers.Authorization = "Bearer ${SUPERVISOR_TOKEN}" |
+                  .mcpServers.homeassistant.timeout //= 900000
+                 ' "$CLAUDE_JSON" > "$TMP" && jq -e . "$TMP" >/dev/null 2>&1; then
+                # Same-filesystem rename → atomic. A crash mid-write leaves the
+                # original intact rather than a truncated file that Claude Code
+                # also can't read. mktemp -p keeps it off /tmp (tmpfs), which
+                # would silently degrade mv to copy+unlink and lose atomicity.
+                mv -f "$TMP" "$CLAUDE_JSON"
+                bashio::log.info "[30-skills] Home Assistant MCP enabled (Supervisor proxy)."
+                bashio::log.info "[30-skills]   → Claude can act on entities you expose at"
+                bashio::log.info "[30-skills]     Settings → Voice assistants → Expose. Default: none."
+                bashio::log.info "[30-skills]   → Turn off with enable_mcp_defaults: false"
             else
                 rm -f "$TMP"
                 bashio::log.warning "[30-skills] Failed to write Home Assistant MCP entry — leaving config untouched"
@@ -142,11 +157,11 @@ if bashio::config.true 'enable_mcp_defaults'; then
         # from <= 0.1.2 (uv/uvx is not in this image, so that server never
         # started — silently, because the config looked fine).
         NEEDS_TIME=0
-        jq -e '.mcpServers.time' "$CLAUDE_JSON" >/dev/null 2>&1 || NEEDS_TIME=1
-        jq -e '.mcpServers.time.command == "uvx"' "$CLAUDE_JSON" >/dev/null 2>&1 && NEEDS_TIME=1
+        jq -e '.mcpServers.time == null or .mcpServers.time.command == "uvx"' \
+            "$CLAUDE_JSON" >/dev/null 2>&1 && NEEDS_TIME=1
 
         if [ "$NEEDS_TIME" = "1" ]; then
-            TMP="$(mktemp)"
+            TMP="$(mktemp -p "$(dirname "$CLAUDE_JSON")")"
             if jq --arg bin "$TIME_BIN" --arg tz "$TIME_ZONE" '
                   .mcpServers //= {} |
                   .mcpServers.time = {
@@ -154,8 +169,7 @@ if bashio::config.true 'enable_mcp_defaults'; then
                     command: $bin,
                     args: ["--local-timezone=\($tz)"]
                   }' "$CLAUDE_JSON" > "$TMP" && jq -e . "$TMP" >/dev/null 2>&1; then
-                cat "$TMP" > "$CLAUDE_JSON"
-                rm -f "$TMP"
+                mv -f "$TMP" "$CLAUDE_JSON"
                 bashio::log.info "[30-skills] Seeded time MCP server (tz=${TIME_ZONE})"
             else
                 rm -f "$TMP"
@@ -169,9 +183,9 @@ if bashio::config.true 'enable_mcp_defaults'; then
         # there; every other setting the user has is preserved.
         if [ -f "$LEGACY_SETTINGS" ] && jq -e '.mcpServers' "$LEGACY_SETTINGS" >/dev/null 2>&1; then
             cp -a "$LEGACY_SETTINGS" "${LEGACY_SETTINGS}.bak-mcpmove"
-            TMP="$(mktemp)"
+            TMP="$(mktemp -p "$(dirname "$LEGACY_SETTINGS")")"
             if jq 'del(.mcpServers)' "$LEGACY_SETTINGS" > "$TMP" && jq -e . "$TMP" >/dev/null 2>&1; then
-                cat "$TMP" > "$LEGACY_SETTINGS"
+                mv -f "$TMP" "$LEGACY_SETTINGS"
                 bashio::log.info "[30-skills] Removed inert mcpServers from settings.json (backup: ${LEGACY_SETTINGS}.bak-mcpmove)"
             fi
             rm -f "$TMP"
