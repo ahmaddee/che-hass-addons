@@ -1,5 +1,7 @@
 # CHE Home Assistant Add-ons
 
+**Built by Ahmad Dee, 2026.**
+
 A small collection of Home Assistant add-ons focused on making Claude Code feel native inside HA — persistent, resilient, and out of your way.
 
 ## Add-ons in this repository
@@ -29,7 +31,7 @@ In Home Assistant:
 
 ## License
 
-MIT. See [LICENSE](./LICENSE).
+MIT — use it, change it, ship it, sell it. See [LICENSE](./LICENSE).
 
 ## Contributing
 
