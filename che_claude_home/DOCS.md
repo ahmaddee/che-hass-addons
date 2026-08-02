@@ -38,7 +38,13 @@ Only used when `claude_source: pinned_version`. Enter an exact npm version strin
 
 - `enable_playwright` *(bool, default: false)* — Installs Chromium + Playwright MCP for browser automation. Heavy install, only turn on if you need it.
 - `enable_image_upload` *(bool, default: true)* — Enables the image-paste service that lets you drop screenshots into the terminal
-- `enable_mcp_defaults` *(bool, default: true)* — Seeds `~/.claude/settings.json` with sensible default MCP servers (HA + time)
+- `enable_mcp_defaults` *(bool, default: true)* — Registers default MCP servers in `~/.claude.json`:
+  - **`homeassistant`** — control your house from Claude with **no setup at all**. Uses the add-on's
+    own Supervisor credentials against Home Assistant's stateless MCP endpoint, so there is no token
+    to create and no IP address to configure. The credential is refreshed on every start.
+  - **`time`** — current date/time in your Home Assistant timezone.
+
+  Already customised `homeassistant` to point at your own instance? It's left untouched.
 
 ### Persistent packages
 

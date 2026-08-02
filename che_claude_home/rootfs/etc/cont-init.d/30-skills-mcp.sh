@@ -26,12 +26,28 @@ if [ -d "$SEED_SRC" ]; then
 fi
 
 # --- Optionally seed default MCP config ---
+#
+# ⚠️ TARGET FILE: ~/.claude.json — NOT ~/.claude/settings.json.
+#
+# Claude Code reads MCP server definitions ONLY from `~/.claude.json` (user and
+# local scope) and `.mcp.json` (project scope). `mcpServers` is not a documented
+# key in settings.json and is never read from there.
+#
+# Releases up to 0.1.12 wrote the seed into `~/.claude/settings.json`, so
+# `enable_mcp_defaults` silently did nothing on every install that has ever
+# existed: the file was written, the log said "Writing default MCP config", and
+# no server was ever registered. Same failure shape as the uvx bug below and as
+# the tmux.conf written to /root while HOME was /data/home — something written
+# correctly, and the thing meant to consume it looking somewhere else.
+#
+# `.claude.json` also holds the OAuth session, per-project trust state and
+# caches, so it is ALWAYS merged with jq and written atomically. Never truncate it.
 if bashio::config.true 'enable_mcp_defaults'; then
-    SETTINGS="$CLAUDE_HOME/settings.json"
+    CLAUDE_JSON="/data/home/.claude.json"
+    LEGACY_SETTINGS="$CLAUDE_HOME/settings.json"
 
-    # Install into /data/packages so it survives image rebuilds. Guarded so it
-    # only runs once, and non-fatal so a boot without network cannot abort
-    # container start — it simply retries on the next one.
+    # Install into /data/packages so it survives image rebuilds. Non-fatal so a
+    # boot without network cannot abort container start — it retries next boot.
     if [ ! -x "$TIME_BIN" ]; then
         bashio::log.info "[30-skills] Installing mcp-server-time into /data/packages"
         if persist-install --python mcp-server-time >/dev/null 2>&1; then
@@ -44,42 +60,115 @@ if bashio::config.true 'enable_mcp_defaults'; then
     # Supervisor exports TZ from Home Assistant's configured timezone.
     TIME_ZONE="${TZ:-UTC}"
 
-    mkdir -p "$CLAUDE_HOME"
+    mkdir -p "$CLAUDE_HOME" /data/home
 
-    if [ ! -f "$SETTINGS" ]; then
-        bashio::log.info "[30-skills] Writing default MCP config to $SETTINGS (tz=${TIME_ZONE})"
-        jq -n --arg bin "$TIME_BIN" --arg tz "$TIME_ZONE" '{
-          mcpServers: {
-            time: {
-              type: "stdio",
-              command: $bin,
-              args: ["--local-timezone=\($tz)"]
-            }
-          }
-        }' > "$SETTINGS"
+    # Ensure the file exists and is valid JSON before jq touches it. A truncated
+    # or absent file must not make the whole boot fail.
+    if [ ! -f "$CLAUDE_JSON" ]; then
+        echo '{}' > "$CLAUDE_JSON"
+        bashio::log.info "[30-skills] Created $CLAUDE_JSON"
+    elif ! jq -e . "$CLAUDE_JSON" >/dev/null 2>&1; then
+        bashio::log.warning "[30-skills] $CLAUDE_JSON is not valid JSON — leaving it alone"
+        CLAUDE_JSON=""
+    fi
 
-    elif jq -e '.mcpServers.time.command == "uvx"' "$SETTINGS" >/dev/null 2>&1; then
-        # Repair add-ons seeded by <= 0.1.2. Without this, existing installs stay
-        # broken forever, because the branch below deliberately never touches an
-        # existing settings.json. Only the one known-bad key is rewritten;
-        # everything else the user has set is preserved.
-        bashio::log.warning "[30-skills] Repairing unusable uvx-based time server in $SETTINGS"
-        cp -a "$SETTINGS" "${SETTINGS}.bak-uvx"
-        TMP_SETTINGS="$(mktemp)"
-        if jq --arg bin "$TIME_BIN" --arg tz "$TIME_ZONE" '.mcpServers.time = {
-              type: "stdio",
-              command: $bin,
-              args: ["--local-timezone=\($tz)"]
-            }' "$SETTINGS" > "$TMP_SETTINGS"; then
-            mv "$TMP_SETTINGS" "$SETTINGS"
-            bashio::log.info "[30-skills] Repaired (backup at ${SETTINGS}.bak-uvx)"
+    if [ -n "$CLAUDE_JSON" ]; then
+        # ── Home Assistant, via the Supervisor proxy ────────────────────────
+        # http://supervisor/core/api/mcp is HA's STATELESS Streamable HTTP
+        # endpoint, reachable with the add-on's own SUPERVISOR_TOKEN. No
+        # long-lived token to mint, no IP to configure — `supervisor` is a fixed
+        # internal hostname, so this is identical on every install.
+        #
+        # Stateless matters: the legacy /mcp_server/sse endpoint keeps an
+        # in-memory session, so restarting HA Core 404s every subsequent call
+        # until the client reconnects. The stateless route has no session to
+        # invalidate. (Confirmed against HA 2026.7.4; MCP spec 2026-07-28 removes
+        # protocol-level sessions entirely and deprecates HTTP+SSE.)
+        #
+        # timeout: Claude Code aborts a tool call idle for 5 minutes on http
+        # transports. HA scripts that hold an internal delay trip that and report
+        # a false failure. A per-server timeout raises it. Needs Claude Code
+        # >= 2.1.203.
+        #
+        # ⚠️ SUPERVISOR_TOKEN is injected per container start, so this is
+        # REFRESHED ON EVERY BOOT rather than seeded once behind a `[ ! -f ]`
+        # guard. A first-boot-only guard would bake in a token that goes stale on
+        # the next restart, and the symptom would look exactly like the SSE
+        # session bug for an entirely different reason.
+        HA_URL="http://supervisor/core/api/mcp"
+
+        if [ -z "${SUPERVISOR_TOKEN:-}" ]; then
+            bashio::log.warning "[30-skills] SUPERVISOR_TOKEN unset — skipping Home Assistant MCP seed"
         else
-            rm -f "$TMP_SETTINGS"
-            bashio::log.warning "[30-skills] Repair failed — leaving $SETTINGS untouched"
+            # Only manage this entry while it still points at our URL. If the
+            # user has repointed it at their own HA instance with their own
+            # token, leave it completely alone.
+            EXISTING_URL="$(jq -r '.mcpServers.homeassistant.url // ""' "$CLAUDE_JSON")"
+            if [ -n "$EXISTING_URL" ] && [ "$EXISTING_URL" != "$HA_URL" ]; then
+                bashio::log.info "[30-skills] homeassistant MCP is user-customised (${EXISTING_URL}) — not touching it"
+            else
+                TMP="$(mktemp)"
+                if jq --arg tok "$SUPERVISOR_TOKEN" --arg url "$HA_URL" '
+                      .mcpServers //= {} |
+                      .mcpServers.homeassistant = {
+                        type: "http",
+                        url: $url,
+                        headers: { Authorization: ("Bearer " + $tok) },
+                        timeout: 900000
+                      }' "$CLAUDE_JSON" > "$TMP" && jq -e . "$TMP" >/dev/null 2>&1; then
+                    cat "$TMP" > "$CLAUDE_JSON"   # preserve inode/permissions
+                    rm -f "$TMP"
+                    if [ -z "$EXISTING_URL" ]; then
+                        bashio::log.info "[30-skills] Seeded Home Assistant MCP (${HA_URL})"
+                    else
+                        bashio::log.info "[30-skills] Refreshed Home Assistant MCP token"
+                    fi
+                else
+                    rm -f "$TMP"
+                    bashio::log.warning "[30-skills] Failed to write Home Assistant MCP entry — leaving config untouched"
+                fi
+            fi
         fi
 
-    else
-        bashio::log.info "[30-skills] $SETTINGS exists — leaving user config untouched"
+        # ── time ───────────────────────────────────────────────────────────
+        # Seeded only when absent, or when it is the known-broken uvx definition
+        # from <= 0.1.2 (uv/uvx is not in this image, so that server never
+        # started — silently, because the config looked fine).
+        NEEDS_TIME=0
+        jq -e '.mcpServers.time' "$CLAUDE_JSON" >/dev/null 2>&1 || NEEDS_TIME=1
+        jq -e '.mcpServers.time.command == "uvx"' "$CLAUDE_JSON" >/dev/null 2>&1 && NEEDS_TIME=1
+
+        if [ "$NEEDS_TIME" = "1" ]; then
+            TMP="$(mktemp)"
+            if jq --arg bin "$TIME_BIN" --arg tz "$TIME_ZONE" '
+                  .mcpServers //= {} |
+                  .mcpServers.time = {
+                    type: "stdio",
+                    command: $bin,
+                    args: ["--local-timezone=\($tz)"]
+                  }' "$CLAUDE_JSON" > "$TMP" && jq -e . "$TMP" >/dev/null 2>&1; then
+                cat "$TMP" > "$CLAUDE_JSON"
+                rm -f "$TMP"
+                bashio::log.info "[30-skills] Seeded time MCP server (tz=${TIME_ZONE})"
+            else
+                rm -f "$TMP"
+                bashio::log.warning "[30-skills] Failed to write time MCP entry — leaving config untouched"
+            fi
+        fi
+
+        # ── Retire the mis-targeted legacy block ────────────────────────────
+        # Anything <= 0.1.12 wrote landed in settings.json where it was never
+        # read. Strip just that key so the file stops implying MCP is configured
+        # there; every other setting the user has is preserved.
+        if [ -f "$LEGACY_SETTINGS" ] && jq -e '.mcpServers' "$LEGACY_SETTINGS" >/dev/null 2>&1; then
+            cp -a "$LEGACY_SETTINGS" "${LEGACY_SETTINGS}.bak-mcpmove"
+            TMP="$(mktemp)"
+            if jq 'del(.mcpServers)' "$LEGACY_SETTINGS" > "$TMP" && jq -e . "$TMP" >/dev/null 2>&1; then
+                cat "$TMP" > "$LEGACY_SETTINGS"
+                bashio::log.info "[30-skills] Removed inert mcpServers from settings.json (backup: ${LEGACY_SETTINGS}.bak-mcpmove)"
+            fi
+            rm -f "$TMP"
+        fi
     fi
 else
     bashio::log.info "[30-skills] enable_mcp_defaults=false — skipping MCP seed"

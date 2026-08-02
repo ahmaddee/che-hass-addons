@@ -1,3 +1,41 @@
+## 0.1.13
+
+**Home Assistant control now works out of the box — no token, no setup.**
+
+- **added**: `homeassistant` MCP server is registered automatically, pointed at HA's stateless
+  Streamable HTTP endpoint via the Supervisor proxy (`http://supervisor/core/api/mcp`) using the
+  add-on's own credentials. No long-lived token to mint, no IP address to configure — `supervisor`
+  is a fixed internal hostname, so it is identical on every install. The credential is **refreshed
+  on every start**, because Supervisor issues it per container start; a first-boot-only guard would
+  bake in a token that goes stale on the next restart.
+
+- **fixed**: `enable_mcp_defaults` wrote its config to `~/.claude/settings.json`, but Claude Code
+  reads MCP servers only from `~/.claude.json`. **The option has therefore done nothing on every
+  install that has ever existed** — the file was written, the log said "Writing default MCP config",
+  and no server was ever registered. Now targets `~/.claude.json`, merged with `jq` and written
+  atomically so the OAuth session and project state in that file are never disturbed. Any inert
+  `mcpServers` block left in `settings.json` is removed (backup kept alongside).
+
+  Third instance of this failure shape in this add-on: something written correctly, and the thing
+  meant to consume it looking somewhere else. See also the `.tmux.conf` written to `/root` while
+  `HOME` was `/data/home` (0.1.2), and the `uvx` time server that pointed at a binary this image
+  does not ship (0.1.3).
+
+- **why stateless matters**: HA's legacy `/mcp_server/sse` endpoint holds an in-memory session, so
+  restarting Home Assistant makes every subsequent MCP call fail with a 404 until the client
+  reconnects — with no error a user could interpret. The stateless endpoint has no session to
+  invalidate. Verified by restarting HA Core and confirming the next call succeeded. MCP spec
+  revision 2026-07-28 removes protocol-level sessions entirely and deprecates HTTP+SSE, so this is
+  also where the standard is going.
+
+- **added**: per-server `timeout` (15 min) on the Home Assistant entry. Claude Code aborts a tool
+  call that has been idle for 5 minutes on HTTP transports; HA scripts holding an internal delay
+  trip that and report a false failure while still running perfectly. Requires Claude Code
+  >= 2.1.203.
+
+- **changed**: users who have repointed `homeassistant` at their own instance are detected by URL and
+  left completely alone.
+
 # Changelog
 
 ## 0.1.12 — 2026-07-27
