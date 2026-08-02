@@ -19,3 +19,22 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Acknowledgements
+
+This add-on was written from scratch, but it exists because other people solved
+the hard parts first and published their work. It follows patterns established
+by, and was directly inspired by:
+
+  - ESJavadex/claude-code-ha        https://github.com/esjavadex/claude-code-ha
+  - heytcass/home-assistant-addons  https://github.com/heytcass/home-assistant-addons
+
+Both are MIT licensed. Where any of their work is reflected here, their
+copyright and permission notices apply alongside the above, and this notice is
+included so that attribution travels with the code rather than living only in a
+README.
+
+With thanks to Anthropic for Claude Code, and to the Home Assistant community
+add-on maintainers whose conventions this repository follows.

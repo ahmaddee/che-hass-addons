@@ -39,7 +39,8 @@ get_token() {
         return
     fi
 
-    # Fall back to secrets.yaml (Ahmad's setup)
+    # Fall back to a long-lived token in secrets.yaml, for the cases the
+    # Supervisor proxy doesn't cover.
     local token=""
     if [ -f /config/secrets.yaml ]; then
         token=$(grep '^claude_ha_token:' /config/secrets.yaml 2>/dev/null | sed 's/.*: *//;s/"//g' | head -1)
