@@ -1,3 +1,35 @@
+## 0.1.16
+
+**`enable_playwright` never actually delivered browser tools. Instance #8 of the house bug.**
+
+- **fixed**: `45-playwright.sh` wrote `mcpServers.playwright` into `.claude/settings.json`. Claude
+  Code does not read MCP servers from `settings.json` — only from `~/.claude.json` and `.mcp.json`.
+  So with `enable_playwright: true` the browser installed (~857 MiB), the log said "Ready", and no
+  browser tools ever appeared. The option was read, the work was done, and the result was filed
+  somewhere nothing looks.
+
+  It was worse than merely inert. `30-skills-mcp.sh` runs first in lexical order and *deletes*
+  `.mcpServers` from `settings.json` — precisely because that key is dead there — and then this
+  script wrote it straight back into the same dead file. Two scripts pulling in opposite directions
+  on a key neither could make work.
+
+  Same root cause as `enable_mcp_defaults` in 0.1.13: **written correctly, read from somewhere
+  else.** Found by checking which file each script targets rather than trusting that a toggle wired
+  to code is a toggle that works.
+
+- **added**: one-time migration removing the inert `mcpServers.playwright` from `settings.json`,
+  backed up to `settings.json.bak-playwrightmove` rather than silently dropped.
+
+- **changed**: the playwright write is now atomic (`mktemp -p` + `mv -f`) and guards against invalid
+  JSON, matching `30-skills-mcp.sh`. The "already configured — leaving user config untouched" check
+  is preserved, so swapping `--isolated` for `--user-data-dir` to keep browser logins across sessions
+  survives upgrades.
+
+- **docs**: both READMEs advertised a **WhatsApp bridge** feature toggle. There is no WhatsApp
+  anywhere in this add-on — `enable_wa_watcher` was removed in 0.1.12 for being read by nothing, and
+  the READMEs kept selling it anyway. Also corrected "opt-in, not always-on": only
+  `enable_playwright` defaults to false.
+
 ## 0.1.15
 
 **Review pass on 0.1.13/0.1.14 — user-config preservation, atomic writes, and visibility.**
