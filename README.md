@@ -15,7 +15,7 @@ The main event. A web-based terminal that runs Anthropic's [Claude Code](https:/
 - **First-class helpers** — `hac` (HA REST wrapper), `persist-install`, session picker, all baked in, no re-bootstrapping every session
 - **Real terminal scrollback** — mouse wheel works, 100k line buffer, no PageUp/PageDown gymnastics
 - **User's choice of Claude version** — baked-with-image (safe), latest-npm (bleeding edge), or pinned-version (rollback safety net)
-- **Optional feature toggles** — WhatsApp bridge, Playwright, image paste — opt-in, not always-on
+- **Feature toggles that actually do something** — Playwright browser (off by default), image paste and Home Assistant MCP wiring (on by default, switch either off) — every option in the schema resolves to code that reads it
 
 See the [add-on directory](./che_claude_home) for install instructions and full docs.
 

@@ -13,7 +13,7 @@ Because the community add-ons that came before this one (particular respect to [
 - **Real terminal scrollback.** 100k line buffer + tmux mouse mode on. No more PageUp/PageDown gymnastics.
 - **First-class HA helpers baked in.** `hac` for HA REST calls, `persist-install` for durable packages, session picker for multi-session workflows.
 - **Choose your Claude Code version.** Bake it with the image (safe), latest npm (bleeding edge), or pin an exact version (rollback safety net).
-- **Opt-in feature toggles.** WhatsApp bridge, Playwright browser, image paste — off by default, on when you want them.
+- **Feature toggles that actually do something.** Playwright browser (`enable_playwright`, off by default), image paste (`enable_image_upload`, on) and Home Assistant MCP wiring (`enable_mcp_defaults`, on). Every option in the schema resolves to code that reads it — no decorative switches.
 
 ## Install
 
