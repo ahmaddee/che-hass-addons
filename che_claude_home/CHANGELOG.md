@@ -1,3 +1,32 @@
+## 0.1.17
+
+**Every restart with `enable_playwright` re-downloaded 857 MiB and served a 502 for 15 minutes.**
+
+- **fixed**: `persist-install` ran `apk add --no-cache`, which discards both the package index and
+  every `.apk` the instant the install finishes. Nothing under `/usr` survives container
+  recreation, so on each start the packages were gone *and* had to be pulled from the network
+  again. With `enable_playwright: true` that was 857 MiB across 178 packages, measured at
+  **15m 21s** on 2026-08-06.
+
+  s6 runs every `cont-init` script to completion before starting any service, so `ttyd` — and the
+  entire web terminal — cannot come up until that finishes. Home Assistant's ingress has nothing
+  to proxy to and serves a bare **502 Bad Gateway**. It is indistinguishable from a crashed
+  add-on, and it happened on every single restart.
+
+  Now uses `apk add --cache-dir /data/apk-cache`. `/data` survives, so the first install still
+  downloads and every install after unpacks from local disk with no network. Override with
+  `APK_CACHE_DIR`; `rm -rf /data/apk-cache` is always safe and only slows the next install.
+
+- **note**: the file-copy step in `persist-install` never solved this and was never going to. It
+  copies only `/usr/bin`, `/usr/sbin`, `/bin` and `/usr/lib/*.so*`. Chromium is a 238 MB
+  *directory* at `/usr/lib/chromium` behind a symlink, needing 151 external shared libraries — so
+  the copy preserved a broken symlink and missed the entire payload. The cache is what actually
+  persists it.
+
+- **changed**: `45-playwright.sh` now says out loud which path it is on — "installing from local
+  cache, no download" versus a warning that the terminal will 502 for 10–20 minutes and that this
+  is **not** a crash. Silence during a quarter-hour outage was the worst part of the bug.
+
 ## 0.1.16
 
 **`enable_playwright` never actually delivered browser tools. Instance #8 of the house bug.**

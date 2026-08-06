@@ -45,8 +45,21 @@ if ! bashio::config.true 'enable_playwright'; then
 fi
 
 # --- Browser -----------------------------------------------------------------
+# NOTE: this blocks. s6 runs every cont-init script to completion before it
+# starts any service, so ttyd — and therefore the whole web terminal — does not
+# come up until this returns. A cold install therefore shows as 502 Bad Gateway
+# in Home Assistant for as long as it takes, which looks exactly like a crash.
+# Saying so in the log is the difference between "it's downloading" and
+# "something is broken". The apk cache in /data (see persist-install) is what
+# keeps this to the first install only.
 if [ ! -x "$CHROMIUM_BIN" ]; then
-    bashio::log.info "[45-playwright] Installing Chromium — ~857 MiB, first boot will take several minutes"
+    if [ -d /data/apk-cache ] && [ -n "$(ls -A /data/apk-cache/*.apk 2>/dev/null)" ]; then
+        bashio::log.info "[45-playwright] Installing Chromium from local cache — no download, ~1 min"
+    else
+        bashio::log.warning "[45-playwright] Installing Chromium — ~857 MiB to download, 10-20 min."
+        bashio::log.warning "[45-playwright] The web terminal will 502 until this finishes. This is NOT a crash."
+        bashio::log.warning "[45-playwright] Cached in /data afterwards, so this happens once."
+    fi
     # Fonts are not optional: without them text renders as boxes in screenshots.
     if persist-install chromium chromium-chromedriver font-noto font-noto-emoji >/dev/null 2>&1; then
         bashio::log.info "[45-playwright] Chromium installed"

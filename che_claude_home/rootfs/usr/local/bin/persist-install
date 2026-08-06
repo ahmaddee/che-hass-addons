@@ -68,7 +68,33 @@ list_packages() {
 install_apk_packages() {
     [ "$#" -eq 0 ] && { echo "persist-install: no apk packages given"; return 1; }
     echo "Installing apk packages: $*"
-    if ! apk add --no-cache "$@"; then
+
+    # --cache-dir, not --no-cache.
+    #
+    # `--no-cache` discards every .apk and the package index the moment the
+    # install finishes. Nothing under /usr survives container recreation, so on
+    # each restart the packages were gone AND had to be re-downloaded. For
+    # enable_playwright that meant re-fetching 857 MiB across 178 packages on
+    # EVERY start — measured at 15m 21s on 2026-08-06, during which ttyd cannot
+    # start (s6 runs all of cont-init before any service) and Home Assistant's
+    # ingress serves a bare 502 Bad Gateway. It looks like a crash. It isn't.
+    #
+    # The file copies below do NOT solve this and never did: they only take
+    # /usr/bin, /usr/sbin, /bin and /usr/lib/*.so*. Chromium is a 238 MB
+    # DIRECTORY at /usr/lib/chromium behind a symlink, needing 151 external
+    # shared libraries — so the copy grabbed a broken symlink and missed the
+    # payload entirely.
+    #
+    # A cache under /data does survive. The first install still downloads;
+    # every install after unpacks from local disk with no network at all.
+    # Verified on apk-tools 2.14.6 — --cache-dir stores both APKINDEX and the
+    # .apk files and reuses them.
+    #
+    # Cost is disk: ~857 MiB for the Chromium set. `rm -rf /data/apk-cache` is
+    # always safe — it only slows the next install, it cannot break anything.
+    APK_CACHE="${APK_CACHE_DIR:-/data/apk-cache}"
+    mkdir -p "$APK_CACHE"
+    if ! apk add --cache-dir "$APK_CACHE" "$@"; then
         echo "persist-install: apk add failed"
         exit 1
     fi
