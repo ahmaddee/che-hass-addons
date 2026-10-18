@@ -34,6 +34,11 @@ detects a changed URL and will not overwrite your settings.
 ### `auto_launch_claude` *(bool, default: true)*
 When true, opening the terminal drops you straight into `claude`. When false, you land on a session picker menu.
 
+### `resume_last_conversation` *(bool, default: true)*
+When true, auto-launch picks up your **last conversation** (`claude --continue`) instead of opening a blank one, so an add-on restart or update drops you straight back where you were. If there is nothing to resume it starts fresh. If a resumed session ends with Ctrl-C or a crash you land on the session picker rather than in a new empty conversation. The picker's own choices are unaffected: "new" always means new.
+
+Whichever way Claude starts, the add-on runs the **newest working** Claude Code it can find (npm install, `claude update`, a user copy, or the one baked into the image), checked with `--version` at launch, so a stale or half-downloaded copy can never quietly win.
+
 ### `survive_restart` *(bool, default: true)*
 When true, Claude runs inside a persistent tmux session. Close the browser tab, come back later — same conversation, still there.
 

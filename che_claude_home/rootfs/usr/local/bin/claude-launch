@@ -1,0 +1,58 @@
+#!/bin/sh
+# ============================================================================
+# claude-launch — the one way this add-on starts Claude Code.
+#
+# 1. Resolves the NEWEST WORKING claude binary. Several copies can coexist:
+#      /data/npm/bin/claude                     (claude_source: latest_npm)
+#      /data/.local/share/claude/versions/*     (`claude update`, native installer)
+#      /data/home/.local/bin/claude             (user / pinned copy)
+#      /usr/local/bin/claude, /root/.local/bin/claude   (baked into the image)
+#    Each is asked `--version` (20 s timeout) and the highest version wins, so a
+#    truncated download or a stale baked copy can never silently win. Before
+#    0.1.18 the session picker resumed on the BAKED copy while auto-launch used
+#    npm: a silent downgrade, found at Sawfar on 2026-10-18.
+#
+# 2. RESUMES the last conversation on a bare launch (no args, or only
+#    --dangerously-skip-permissions) when CHE_RESUME_LAST=true, so an add-on
+#    restart lands back in the same conversation instead of a blank one.
+#    Falls back to a fresh conversation ONLY if --continue fails fast (nothing
+#    to resume). A real session that ended in Ctrl-C or a crash exits back to
+#    the picker; the old `--continue && exit 0` opened a new empty conversation
+#    on any non-zero exit.
+#
+# Anything else (`claude-launch -r`, `claude-launch --version`, ...) is passed
+# straight through to the resolved binary.
+# ============================================================================
+
+self=$(readlink -f "$0" 2>/dev/null || echo "$0")
+
+# "2.1.302 (Claude Code)" -> 2001302 ; empty if the binary does not answer.
+vkey() {
+    timeout 20 "$1" --version 2>/dev/null | head -1 \
+        | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 \
+        | awk -F. '{ printf "%d", $1*1000000 + $2*1000 + $3 }'
+}
+
+REAL=""
+BEST=0
+for c in /data/npm/bin/claude /data/.local/share/claude/versions/* \
+         /data/home/.local/bin/claude /usr/local/bin/claude /root/.local/bin/claude; do
+    [ -x "$c" ] || continue
+    [ "$(readlink -f "$c" 2>/dev/null)" = "$self" ] && continue   # never resolve to ourselves
+    k=$(vkey "$c")
+    [ -n "$k" ] || continue
+    if [ "$k" -gt "$BEST" ]; then BEST=$k; REAL=$c; fi
+done
+[ -n "$REAL" ] || REAL=/root/.local/bin/claude   # last resort: the image's own copy
+
+if [ "${CHE_RESUME_LAST:-true}" = "true" ]; then
+    case "$*" in
+        ""|"--dangerously-skip-permissions")
+            start=$(date +%s)
+            "$REAL" --continue "$@"; rc=$?
+            [ "$rc" -eq 0 ] && exit 0
+            [ $(( $(date +%s) - start )) -gt 20 ] && exit "$rc"
+            exec "$REAL" "$@" ;;
+    esac
+fi
+exec "$REAL" "$@"

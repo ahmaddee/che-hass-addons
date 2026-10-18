@@ -11,6 +11,7 @@ set -e
 PORT="${TTYD_PORT:-7681}"
 SURVIVE=$(bashio::config 'survive_restart' 'true')
 AUTO_LAUNCH=$(bashio::config 'auto_launch_claude' 'true')
+RESUME_LAST=$(bashio::config 'resume_last_conversation' 'true')
 DANGEROUS=$(bashio::config 'dangerously_skip_permissions' 'false')
 WORKDIR=$(bashio::config 'working_directory' '/config')
 
@@ -24,6 +25,7 @@ fi
 bashio::log.info "[ttyd] starting on port ${PORT}"
 bashio::log.info "[ttyd]   survive_restart=${SURVIVE}"
 bashio::log.info "[ttyd]   auto_launch_claude=${AUTO_LAUNCH}"
+bashio::log.info "[ttyd]   resume_last_conversation=${RESUME_LAST}"
 bashio::log.info "[ttyd]   working_directory=${WORKDIR}"
 
 # Export env for the shells ttyd spawns (mirrors /etc/profile.d/che-env.sh
@@ -36,6 +38,8 @@ export XDG_DATA_HOME="/data/.local/share"
 export ANTHROPIC_CONFIG_DIR="/data/.config/claude"
 export ANTHROPIC_HOME="/data"
 export DISABLE_AUTOUPDATER=1
+# 0.1.18: auto-launch resumes the last conversation (see claude-launch).
+export CHE_RESUME_LAST="$RESUME_LAST"
 export IS_SANDBOX=1
 export GH_CONFIG_DIR="/data/.config/gh"
 export PATH="/data/packages/bin:/data/packages/python/venv/bin:/data/home/.local/bin:/data/npm/bin:$PATH"
@@ -48,7 +52,7 @@ if [ "$DANGEROUS" = "true" ]; then
 fi
 
 if [ "$AUTO_LAUNCH" = "true" ]; then
-    LAUNCH_CMD="cd \"$WORKDIR\" && clear && echo 'Welcome to CHE Claude in HomE Assistant' && echo '' && sleep 1 && claude ${CLAUDE_FLAGS}; /usr/local/bin/claude-session-picker"
+    LAUNCH_CMD="cd \"$WORKDIR\" && clear && echo 'Welcome to CHE Claude in HomE Assistant' && echo '' && sleep 1 && /usr/local/bin/claude-launch ${CLAUDE_FLAGS}; /usr/local/bin/claude-session-picker"
 else
     LAUNCH_CMD="cd \"$WORKDIR\" && clear && /usr/local/bin/claude-session-picker"
 fi

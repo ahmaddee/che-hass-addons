@@ -1,3 +1,18 @@
+## 0.1.18
+
+**An add-on restart threw you into a blank conversation, and the session picker could quietly run an older Claude Code.**
+
+- **new**: `resume_last_conversation` (default **on**). Auto-launch now resumes your last conversation
+  (`claude --continue`), so a restart or update lands you back where you were. It falls back to a fresh
+  conversation only when `--continue` fails fast (nothing to resume). A resumed session that ends in Ctrl-C
+  or a crash exits to the session picker instead of opening a new, empty conversation. A naive
+  `--continue && exit 0` gets that wrong, and two installs hit it in the wild on 2026-10-18.
+- **fixed**: the session picker resumed with the **image's baked** Claude Code while auto-launch used the
+  npm-installed one: a silent downgrade, reported from a second install as "2.1.223 doesn't support
+  this model". Both now go through the new `claude-launch`, which asks every installed copy for
+  `--version` and runs the highest one that answers.
+- **note**: picker choices are unaffected by `resume_last_conversation`; "new conversation" is always new.
+
 ## 0.1.17
 
 **Every restart with `enable_playwright` re-downloaded 857 MiB and served a 502 for 15 minutes.**

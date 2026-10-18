@@ -1,7 +1,7 @@
 ---
 name: "CHE Claude in HomE Assistant"
 description: "Claude Code, resilience-first. Sessions survive restarts, everything persists in /data, real scrollback, first-class HA helpers. A fresh take on running Anthropic's Claude Code CLI inside Home Assistant."
-version: "0.1.17"
+version: "0.1.18"
 slug: "che_claude_home"
 init: false
 
@@ -67,6 +67,10 @@ startup: services
 options:
   # Startup behavior
   auto_launch_claude: true
+  # 0.1.18: an add-on restart lands back in the last conversation (claude --continue)
+  # instead of a blank one. Falls back to a fresh conversation only when there is
+  # nothing to resume. The session picker is unaffected.
+  resume_last_conversation: true
   survive_restart: true
 
   # Where shells + Claude Code start. Must exist inside the container — most users
@@ -96,6 +100,7 @@ options:
 
 schema:
   auto_launch_claude: bool?
+  resume_last_conversation: bool?
   survive_restart: bool?
   working_directory: str?
   dangerously_skip_permissions: bool?

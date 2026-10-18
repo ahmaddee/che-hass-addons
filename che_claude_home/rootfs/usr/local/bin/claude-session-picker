@@ -7,7 +7,12 @@
 # ============================================================================
 set -u
 
-CLAUDE_BIN="/usr/local/bin/claude"
+# 0.1.18: go through claude-launch so the picker runs the SAME newest working
+# binary as auto-launch (it used to resume on the baked copy = silent downgrade).
+# Resume-by-default is OFF here: every picker choice means exactly what it says
+# ("1) new" must really be new).
+CLAUDE_BIN="/usr/local/bin/claude-launch"
+export CHE_RESUME_LAST=false
 DANGEROUS_FLAG=""
 
 # Read the danger flag from the addon config once at start
@@ -27,7 +32,7 @@ banner() {
 BANNER
     local ver="unknown"
     if command -v claude >/dev/null 2>&1; then
-        ver=$(timeout 5 "$CLAUDE_BIN" --version 2>/dev/null || echo "unknown")
+        ver=$(timeout 60 "$CLAUDE_BIN" --version 2>/dev/null || echo "unknown")
     fi
     echo "  Claude Code version: $ver"
     if [ -n "$DANGEROUS_FLAG" ]; then
